@@ -37,6 +37,16 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tilUrl" />
 
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switchAutoScan"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        android:text="自動スキャン (10秒間隔)"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnScan" />
+
     <TextView
         android:id="@+id/tvPending"
         android:layout_width="0dp"
@@ -47,7 +57,7 @@
         android:textColor="?android:attr/textColorSecondary"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnScan" />
+        app:layout_constraintTop_toBottomOf="@id/switchAutoScan" />
 
     <TextView
         android:id="@+id/tvEmpty"
