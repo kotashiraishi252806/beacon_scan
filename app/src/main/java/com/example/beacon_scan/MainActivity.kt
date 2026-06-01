@@ -56,6 +56,7 @@ private const val DEFAULT_SERVER_URL = "http://192.168.11.119:8081/test_receive2
 private const val PREFS_NAME = "beacon_scan_prefs"
 private const val KEY_DEVICE_UUID = "device_uuid"
 private const val KEY_SERVER_URL = "server_url"
+private const val KEY_SEND_MODE = "send_mode"
 private const val PENDING_FILE = "pending_scans.json"
 private const val AUTO_SCAN_INTERVAL_MS = 10_000L
 
@@ -94,10 +95,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var recyclerView: RecyclerView
     private lateinit var btnScan: Button
+    private lateinit var btnToggleList: Button
     private lateinit var switchAutoScan: SwitchCompat
+    private lateinit var switchSendMode: SwitchCompat
     private lateinit var etUrl: TextInputEditText
     private lateinit var tvEmpty: TextView
     private lateinit var tvStatus: TextView
+    private lateinit var tvSsidCount: TextView
     private val apList = mutableListOf<ScanResult>()
     private lateinit var adapter: ApAdapter
 
@@ -157,14 +161,35 @@ class MainActivity : AppCompatActivity() {
 
         recyclerView = findViewById(R.id.recyclerView)
         btnScan = findViewById(R.id.btnScan)
+        btnToggleList = findViewById(R.id.btnToggleList)
         switchAutoScan = findViewById(R.id.switchAutoScan)
+        switchSendMode = findViewById(R.id.switchSendMode)
         etUrl = findViewById(R.id.etUrl)
         tvEmpty = findViewById(R.id.tvEmpty)
         tvStatus = findViewById(R.id.tvPending)
+        tvSsidCount = findViewById(R.id.tvSsidCount)
+
+        val prefs2 = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        switchSendMode.isChecked = prefs2.getBoolean(KEY_SEND_MODE, true)
+        switchSendMode.setOnCheckedChangeListener { _, isChecked ->
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean(KEY_SEND_MODE, isChecked).apply()
+            if (!isChecked) updatePendingCount()
+        }
 
         adapter = ApAdapter(apList)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
+
+        btnToggleList.setOnClickListener {
+            if (recyclerView.visibility == View.VISIBLE) {
+                recyclerView.visibility = View.GONE
+                btnToggleList.text = "一覧"
+            } else {
+                recyclerView.visibility = View.VISIBLE
+                btnToggleList.text = "閉じる"
+            }
+        }
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         etUrl.setText(prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL))
@@ -290,8 +315,20 @@ class MainActivity : AppCompatActivity() {
         apList.clear()
         apList.addAll(results.sortedByDescending { it.level })
         adapter.notifyDataSetChanged()
-        tvEmpty.visibility = if (apList.isEmpty()) View.VISIBLE else View.GONE
-        recyclerView.visibility = if (apList.isEmpty()) View.GONE else View.VISIBLE
+
+        if (apList.isEmpty()) {
+            tvSsidCount.visibility = View.GONE
+            btnToggleList.visibility = View.GONE
+            recyclerView.visibility = View.GONE
+            tvEmpty.visibility = View.VISIBLE
+        } else {
+            tvSsidCount.text = "検出: ${apList.size}件"
+            tvSsidCount.visibility = View.VISIBLE
+            btnToggleList.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
+            btnToggleList.text = "一覧"
+            tvEmpty.visibility = View.GONE
+        }
 
         val location = latestLocation
         val snapshotList = apList.toList()
@@ -300,8 +337,10 @@ class MainActivity : AppCompatActivity() {
             withContext(Dispatchers.IO) { saveToPending(snapshotList, location) }
             updatePendingCount()
 
-            tvStatus.text = "送信中..."
-            trySendAllPending()
+            if (switchSendMode.isChecked) {
+                tvStatus.text = "送信中..."
+                trySendAllPending()
+            }
 
             isScanInProgress = false
             btnScan.isEnabled = true
@@ -344,40 +383,48 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun trySendAllPending() {
         val pending = withContext(Dispatchers.IO) { ScanStore.load(this@MainActivity) }
-        if (pending.length() == 0) {
+        val total = pending.length()
+        if (total == 0) {
             updatePendingCount()
             return
         }
 
-        val success = withContext(Dispatchers.IO) {
-            runCatching {
-                val conn = URL(getServerUrl()).openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                conn.doOutput = true
-                conn.connectTimeout = 5000
-                conn.readTimeout = 10000
-                OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(pending.toString()) }
-                val code = conn.responseCode
-                Log.d("BeaconScan", "response: $code")
-                conn.disconnect()
-                code in 200..299
-            }.getOrElse { e ->
-                Log.e("BeaconScan", "error: ${e.javaClass.simpleName}: ${e.message}", e)
-                false
+        for (i in 0 until total) {
+            val singleArray = JSONArray().put(pending.getJSONObject(i))
+            tvStatus.text = "送信中... (${i + 1}/${total}件)"
+
+            val success = withContext(Dispatchers.IO) {
+                runCatching {
+                    val conn = URL(getServerUrl()).openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                    conn.doOutput = true
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 10000
+                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString()) }
+                    val code = conn.responseCode
+                    Log.d("BeaconScan", "response: $code")
+                    conn.disconnect()
+                    code in 200..299
+                }.getOrElse { e ->
+                    Log.e("BeaconScan", "error: ${e.javaClass.simpleName}: ${e.message}", e)
+                    false
+                }
+            }
+
+            if (success) {
+                withContext(Dispatchers.IO) { ScanStore.removeFirst(this@MainActivity) }
+            } else {
+                val remaining = withContext(Dispatchers.IO) { ScanStore.count(this@MainActivity) }
+                tvStatus.text = "未送信: ${remaining}件 (送信失敗)"
+                Toast.makeText(this, "送信失敗 — 次回スキャン時に再送します", Toast.LENGTH_SHORT).show()
+                updatePendingCount()
+                return
             }
         }
 
-        if (success) {
-            withContext(Dispatchers.IO) { ScanStore.clearAll(this@MainActivity) }
-            val sentCount = pending.length()
-            tvStatus.text = "送信成功 (計${sentCount}件)"
-            Toast.makeText(this, "送信成功 (計${sentCount}件)", Toast.LENGTH_SHORT).show()
-        } else {
-            val remaining = withContext(Dispatchers.IO) { ScanStore.count(this@MainActivity) }
-            tvStatus.text = "未送信: ${remaining}件 (送信失敗)"
-            Toast.makeText(this, "送信失敗 — 次回スキャン時に再送します", Toast.LENGTH_SHORT).show()
-        }
+        tvStatus.text = "送信成功 (計${total}件)"
+        Toast.makeText(this, "送信成功 (計${total}件)", Toast.LENGTH_SHORT).show()
         updatePendingCount()
     }
 }
