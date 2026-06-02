@@ -60,6 +60,20 @@ private const val KEY_SEND_MODE = "send_mode"
 private const val PENDING_FILE = "pending_scans.json"
 private const val AUTO_SCAN_INTERVAL_MS = 10_000L
 
+data class AccessPoint(
+    val bssid: String,
+    val oui: String,
+    val ssids: List<String>,
+    val rssiDbm: Int,
+    val frequencyMhz: Int,
+    val band: String,
+    val channelWidthMhz: Int,
+    val wifiStandard: String,
+    val wifiStandardCode: Int,
+    val security: String,
+    val capabilitiesRaw: String
+)
+
 object ScanStore {
     fun load(context: Context): JSONArray {
         val file = File(context.filesDir, PENDING_FILE)
@@ -84,6 +98,15 @@ object ScanStore {
 
     fun count(context: Context): Int = load(context).length()
 
+    fun totalRecords(context: Context): Int {
+        val all = load(context)
+        var total = 0
+        for (i in 0 until all.length()) {
+            total += runCatching { all.getJSONObject(i).getJSONArray("access_points").length() }.getOrElse { 0 }
+        }
+        return total
+    }
+
     fun clearAll(context: Context) {
         File(context.filesDir, PENDING_FILE).delete()
     }
@@ -102,7 +125,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvEmpty: TextView
     private lateinit var tvStatus: TextView
     private lateinit var tvSsidCount: TextView
-    private val apList = mutableListOf<ScanResult>()
+    private val apList = mutableListOf<AccessPoint>()
     private lateinit var adapter: ApAdapter
 
     private var latestLocation: Location? = null
@@ -242,7 +265,6 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) return
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
-        // キャッシュがあれば即座に latestLocation へ反映
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
             if (location != null && latestLocation == null) latestLocation = location
         }
@@ -264,7 +286,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updatePendingCount() {
         val count = ScanStore.count(this)
-        tvStatus.text = if (count == 0) "スキャン待機中" else "未送信: ${count}件"
+        tvStatus.text = if (count == 0) "スキャン待機中" else "未送信スキャン数: ${count}回"
     }
 
     private fun getOrCreateDeviceUuid(): String {
@@ -272,6 +294,66 @@ class MainActivity : AppCompatActivity() {
         return prefs.getString(KEY_DEVICE_UUID, null) ?: UUID.randomUUID().toString().also {
             prefs.edit().putString(KEY_DEVICE_UUID, it).apply()
         }
+    }
+
+    private fun getBand(frequencyMhz: Int): String = when {
+        frequencyMhz in 2400..2500 -> "2.4GHz"
+        frequencyMhz in 4900..5924 -> "5GHz"
+        frequencyMhz >= 5925 -> "6GHz"
+        else -> "Unknown"
+    }
+
+    private fun getWifiStandardLabel(code: Int): String = when (code) {
+        ScanResult.WIFI_STANDARD_LEGACY -> "802.11a/b/g"
+        ScanResult.WIFI_STANDARD_11N    -> "802.11n"
+        ScanResult.WIFI_STANDARD_11AC   -> "802.11ac"
+        ScanResult.WIFI_STANDARD_11AX   -> "802.11ax"
+        ScanResult.WIFI_STANDARD_11AD   -> "802.11ad"
+        ScanResult.WIFI_STANDARD_11BE   -> "802.11be"
+        else -> "Unknown"
+    }
+
+    private fun getSecurity(capabilities: String): String = when {
+        capabilities.contains("WPA3") -> "WPA3"
+        capabilities.contains("WPA2") -> "WPA2"
+        capabilities.contains("WPA")  -> "WPA"
+        capabilities.contains("WEP")  -> "WEP"
+        else -> "Open"
+    }
+
+    @Suppress("DEPRECATION")
+    private fun groupByBssid(results: List<ScanResult>): List<AccessPoint> {
+        val grouped = mutableMapOf<String, MutableList<ScanResult>>()
+        for (r in results) {
+            grouped.getOrPut(r.BSSID) { mutableListOf() }.add(r)
+        }
+        return grouped.map { (bssid, scanResults) ->
+            val representative = scanResults.maxByOrNull { it.level } ?: scanResults.first()
+            val ssids = scanResults.mapNotNull { it.SSID.ifEmpty { null } }.distinct()
+            val wifiStandardCode = representative.wifiStandard
+            val channelWidthMhz = when (representative.channelWidth) {
+                ScanResult.CHANNEL_WIDTH_20MHZ          -> 20
+                ScanResult.CHANNEL_WIDTH_40MHZ          -> 40
+                ScanResult.CHANNEL_WIDTH_80MHZ          -> 80
+                ScanResult.CHANNEL_WIDTH_160MHZ         -> 160
+                ScanResult.CHANNEL_WIDTH_80MHZ_PLUS_MHZ -> 160
+                5                                       -> 320
+                else                                    -> 20
+            }
+            AccessPoint(
+                bssid = bssid,
+                oui = bssid.take(8),
+                ssids = ssids,
+                rssiDbm = representative.level,
+                frequencyMhz = representative.frequency,
+                band = getBand(representative.frequency),
+                channelWidthMhz = channelWidthMhz,
+                wifiStandard = getWifiStandardLabel(wifiStandardCode),
+                wifiStandardCode = wifiStandardCode,
+                security = getSecurity(representative.capabilities),
+                capabilitiesRaw = representative.capabilities
+            )
+        }.sortedByDescending { it.rssiDbm }
     }
 
     private fun checkPermissionsAndScan() {
@@ -311,9 +393,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         @Suppress("DEPRECATION")
-        val results = wifiManager.scanResults
+        val rawResults = wifiManager.scanResults
+        val grouped = groupByBssid(rawResults)
         apList.clear()
-        apList.addAll(results.sortedByDescending { it.level })
+        apList.addAll(grouped)
         adapter.notifyDataSetChanged()
 
         if (apList.isEmpty()) {
@@ -322,7 +405,7 @@ class MainActivity : AppCompatActivity() {
             recyclerView.visibility = View.GONE
             tvEmpty.visibility = View.VISIBLE
         } else {
-            tvSsidCount.text = "検出: ${apList.size}件"
+            tvSsidCount.text = "今回検出: ${apList.size}件\n未送信データ合計: 集計中..."
             tvSsidCount.visibility = View.VISIBLE
             btnToggleList.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
@@ -332,14 +415,24 @@ class MainActivity : AppCompatActivity() {
 
         val location = latestLocation
         val snapshotList = apList.toList()
+        val scanId = UUID.randomUUID().toString()
+        val currentScanCount = apList.size
 
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) { saveToPending(snapshotList, location) }
+            withContext(Dispatchers.IO) { saveToPending(snapshotList, location, scanId) }
+            val totalRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
+            if (currentScanCount > 0) {
+                tvSsidCount.text = "今回検出: ${currentScanCount}件\n未送信データ合計: ${totalRecords}件"
+            }
             updatePendingCount()
 
             if (switchSendMode.isChecked) {
                 tvStatus.text = "送信中..."
                 trySendAllPending()
+                val remainingRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
+                if (currentScanCount > 0) {
+                    tvSsidCount.text = "今回検出: ${currentScanCount}件\n未送信データ合計: ${remainingRecords}件"
+                }
             }
 
             isScanInProgress = false
@@ -351,32 +444,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveToPending(results: List<ScanResult>, location: Location?) {
+    private fun saveToPending(accessPoints: List<AccessPoint>, location: Location?, scanId: String) {
         val timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
-        val resultsArray = JSONArray()
-        for (ap in results) {
-            @Suppress("DEPRECATION")
-            resultsArray.put(JSONObject().apply {
-                put("ssid", ap.SSID.ifEmpty { "" })
-                put("bssid", ap.BSSID)
-                put("rssi", ap.level)
+        val apArray = JSONArray()
+        for (ap in accessPoints) {
+            apArray.put(JSONObject().apply {
+                put("bssid", ap.bssid)
+                put("oui", ap.oui)
+                put("ssids", JSONArray(ap.ssids))
+                put("rssi_dbm", ap.rssiDbm)
+                put("frequency_mhz", ap.frequencyMhz)
+                put("band", ap.band)
+                put("channel_width_mhz", ap.channelWidthMhz)
+                put("wifi_standard", ap.wifiStandard)
+                put("wifi_standard_code", ap.wifiStandardCode)
+                put("security", ap.security)
+                put("capabilities_raw", ap.capabilitiesRaw)
             })
         }
         val entry = JSONObject().apply {
+            put("scan_id", scanId)
             put("device_id", getOrCreateDeviceUuid())
-            put("manufacturer", Build.MANUFACTURER)
-            put("model", Build.MODEL)
-            put("timestamp", timestamp)
+            put("device", JSONObject().apply {
+                put("manufacturer", Build.MANUFACTURER)
+                put("model", Build.MODEL)
+                put("android_api", Build.VERSION.SDK_INT)
+            })
+            put("scanned_at", timestamp)
             if (location != null) {
-                put("latitude", location.latitude)
-                put("longitude", location.longitude)
-                put("location_accuracy", location.accuracy.toDouble())
+                put("location", JSONObject().apply {
+                    put("latitude", location.latitude)
+                    put("longitude", location.longitude)
+                    put("accuracy_m", location.accuracy.toDouble())
+                })
             } else {
-                put("latitude", JSONObject.NULL)
-                put("longitude", JSONObject.NULL)
-                put("location_accuracy", JSONObject.NULL)
+                put("location", JSONObject.NULL)
             }
-            put("results", resultsArray)
+            put("access_points", apArray)
         }
         ScanStore.append(this, entry)
     }
@@ -429,12 +533,14 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-class ApAdapter(private val items: List<ScanResult>) : RecyclerView.Adapter<ApAdapter.ViewHolder>() {
+class ApAdapter(private val items: List<AccessPoint>) : RecyclerView.Adapter<ApAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val tvSsid: TextView = view.findViewById(R.id.tvSsid)
         val tvBssid: TextView = view.findViewById(R.id.tvBssid)
+        val tvSsids: TextView = view.findViewById(R.id.tvSsids)
         val tvSignal: TextView = view.findViewById(R.id.tvSignal)
+        val tvStandard: TextView = view.findViewById(R.id.tvStandard)
+        val tvSecurity: TextView = view.findViewById(R.id.tvSecurity)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -444,10 +550,11 @@ class ApAdapter(private val items: List<ScanResult>) : RecyclerView.Adapter<ApAd
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val ap = items[position]
-        @Suppress("DEPRECATION")
-        holder.tvSsid.text = ap.SSID.ifEmpty { "(非公開)" }
-        holder.tvBssid.text = "BSSID: ${ap.BSSID}"
-        holder.tvSignal.text = "電波強度: ${ap.level} dBm"
+        holder.tvBssid.text = ap.bssid
+        holder.tvSsids.text = if (ap.ssids.isEmpty()) "(非公開)" else ap.ssids.joinToString(" / ")
+        holder.tvSignal.text = "${ap.rssiDbm} dBm  |  ${ap.band}  |  ${ap.channelWidthMhz}MHz幅"
+        holder.tvStandard.text = ap.wifiStandard
+        holder.tvSecurity.text = ap.security
     }
 
     override fun getItemCount() = items.size
