@@ -118,6 +118,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var recyclerView: RecyclerView
     private lateinit var btnScan: Button
+    private lateinit var btnSendPending: Button
     private lateinit var btnToggleList: Button
     private lateinit var switchAutoScan: SwitchCompat
     private lateinit var switchSendMode: SwitchCompat
@@ -184,6 +185,7 @@ class MainActivity : AppCompatActivity() {
 
         recyclerView = findViewById(R.id.recyclerView)
         btnScan = findViewById(R.id.btnScan)
+        btnSendPending = findViewById(R.id.btnSendPending)
         btnToggleList = findViewById(R.id.btnToggleList)
         switchAutoScan = findViewById(R.id.switchAutoScan)
         switchSendMode = findViewById(R.id.switchSendMode)
@@ -226,6 +228,17 @@ class MainActivity : AppCompatActivity() {
             saveUrl()
             autoScanHandler.removeCallbacks(autoScanRunnable)
             checkPermissionsAndScan()
+        }
+
+        btnSendPending.setOnClickListener {
+            saveUrl()
+            btnSendPending.isEnabled = false
+            btnScan.isEnabled = false
+            lifecycleScope.launch {
+                tvStatus.text = "送信中..."
+                trySendAllPending()
+                btnScan.isEnabled = !isScanInProgress
+            }
         }
 
         switchAutoScan.setOnCheckedChangeListener { _, isChecked ->
@@ -287,6 +300,7 @@ class MainActivity : AppCompatActivity() {
     private fun updatePendingCount() {
         val count = ScanStore.count(this)
         tvStatus.text = if (count == 0) "スキャン待機中" else "未送信スキャン数: ${count}回"
+        btnSendPending.isEnabled = count > 0 && !isScanInProgress
     }
 
     private fun getOrCreateDeviceUuid(): String {
@@ -437,6 +451,7 @@ class MainActivity : AppCompatActivity() {
 
             isScanInProgress = false
             btnScan.isEnabled = true
+            updatePendingCount()
 
             if (switchAutoScan.isChecked) {
                 autoScanHandler.postDelayed(autoScanRunnable, AUTO_SCAN_INTERVAL_MS)
