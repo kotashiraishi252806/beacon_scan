@@ -41,11 +41,23 @@
         android:id="@+id/switchAutoScan"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
+        android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
         android:text="自動スキャン (10秒間隔)"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btnScan" />
+
+    <Button
+        android:id="@+id/btnPauseAutoScan"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="16dp"
+        android:text="一時停止"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBaseline_toBaselineOf="@id/switchAutoScan" />
 
     <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/switchSendMode"
@@ -63,13 +75,28 @@
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="4dp"
         android:layout_marginTop="8dp"
         android:text="未送信データを送信"
         android:enabled="false"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnDiscardPending"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/switchSendMode" />
+
+    <Button
+        android:id="@+id/btnDiscardPending"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="8dp"
+        android:text="破棄"
+        android:enabled="false"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/switchSendMode"
+        app:layout_constraintBaseline_toBaselineOf="@id/btnSendPending" />
 
     <TextView
         android:id="@+id/tvPending"
@@ -112,7 +139,7 @@
         android:id="@+id/tvEmpty"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="スキャンボタンを押してください"
+        android:text="スキャンボタン：ボタンをクリックで手動で測定\n自動スキャントグル：ONで10秒間隔で自動測定"
         android:textSize="16sp"
         android:textColor="?android:attr/textColorSecondary"
         android:visibility="visible"

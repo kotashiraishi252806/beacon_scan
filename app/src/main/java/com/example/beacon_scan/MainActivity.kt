@@ -23,6 +23,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
@@ -107,6 +108,26 @@ object ScanStore {
         return total
     }
 
+    fun updateLabelBySessionId(context: Context, sessionId: String, newLabel: String) {
+        val all = load(context)
+        for (i in 0 until all.length()) {
+            val obj = all.getJSONObject(i)
+            if (obj.optString("label") == sessionId) obj.put("label", newLabel)
+        }
+        File(context.filesDir, PENDING_FILE).writeText(all.toString())
+    }
+
+    fun countByLabel(context: Context): Map<String, Int> {
+        val all = load(context)
+        val result = mutableMapOf<String, Int>()
+        for (i in 0 until all.length()) {
+            val label = runCatching { all.getJSONObject(i).getString("label") }.getOrElse { "" }
+            val key = label.ifEmpty { "（ラベルなし）" }
+            result[key] = (result[key] ?: 0) + 1
+        }
+        return result
+    }
+
     fun clearAll(context: Context) {
         File(context.filesDir, PENDING_FILE).delete()
     }
@@ -119,6 +140,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var btnScan: Button
     private lateinit var btnSendPending: Button
+    private lateinit var btnDiscardPending: Button
+    private lateinit var btnPauseAutoScan: Button
     private lateinit var btnToggleList: Button
     private lateinit var switchAutoScan: SwitchCompat
     private lateinit var switchSendMode: SwitchCompat
@@ -140,6 +163,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var isScanInProgress = false
+    private var autoScanSessionId: String? = null
+    private var autoScanStartTime: Date? = null
+    private var isAutoScanPaused = false
     private val autoScanHandler = Handler(Looper.getMainLooper())
     private val autoScanRunnable = object : Runnable {
         override fun run() {
@@ -186,6 +212,8 @@ class MainActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         btnScan = findViewById(R.id.btnScan)
         btnSendPending = findViewById(R.id.btnSendPending)
+        btnDiscardPending = findViewById(R.id.btnDiscardPending)
+        btnPauseAutoScan = findViewById(R.id.btnPauseAutoScan)
         btnToggleList = findViewById(R.id.btnToggleList)
         switchAutoScan = findViewById(R.id.switchAutoScan)
         switchSendMode = findViewById(R.id.switchSendMode)
@@ -237,19 +265,74 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 tvStatus.text = "送信中..."
                 trySendAllPending()
+                val remainingCount = withContext(Dispatchers.IO) { ScanStore.count(this@MainActivity) }
+                if (remainingCount == 0) {
+                    tvSsidCount.visibility = View.GONE
+                } else {
+                    val remainingRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
+                    if (tvSsidCount.visibility == View.VISIBLE) {
+                        val firstLine = tvSsidCount.text.lines().firstOrNull() ?: ""
+                        tvSsidCount.text = "$firstLine\n未送信データ合計: ${remainingRecords}件"
+                    }
+                }
                 btnScan.isEnabled = !isScanInProgress
+                updatePendingCount()
+            }
+        }
+
+        btnDiscardPending.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("未送信データの破棄")
+                .setMessage("未送信データをすべて削除します。この操作は取り消せません。")
+                .setPositiveButton("破棄する") { _, _ ->
+                    ScanStore.clearAll(this)
+                    tvSsidCount.visibility = View.GONE
+                    updatePendingCount()
+                }
+                .setNegativeButton("キャンセル", null)
+                .show()
+        }
+
+        btnPauseAutoScan.setOnClickListener {
+            if (!isAutoScanPaused) {
+                autoScanHandler.removeCallbacks(autoScanRunnable)
+                isAutoScanPaused = true
+                btnPauseAutoScan.text = "再開"
+                tvStatus.text = "自動スキャン 一時停止中"
+            } else {
+                isAutoScanPaused = false
+                btnPauseAutoScan.text = "一時停止"
+                tvStatus.text = "自動スキャン ON (10秒間隔)"
+                if (!isScanInProgress) {
+                    autoScanHandler.postDelayed(autoScanRunnable, AUTO_SCAN_INTERVAL_MS)
+                }
             }
         }
 
         switchAutoScan.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
+                autoScanSessionId = UUID.randomUUID().toString()
+                autoScanStartTime = Date()
+                isAutoScanPaused = false
+                btnPauseAutoScan.text = "一時停止"
+                btnPauseAutoScan.visibility = View.VISIBLE
                 if (!isScanInProgress) {
                     autoScanHandler.postDelayed(autoScanRunnable, AUTO_SCAN_INTERVAL_MS)
                 }
                 tvStatus.text = "自動スキャン ON (10秒間隔)"
             } else {
                 autoScanHandler.removeCallbacks(autoScanRunnable)
-                if (!isScanInProgress) updatePendingCount()
+                isAutoScanPaused = false
+                btnPauseAutoScan.visibility = View.GONE
+                val sessionId = autoScanSessionId
+                val startTime = autoScanStartTime
+                autoScanSessionId = null
+                autoScanStartTime = null
+                if (sessionId != null && startTime != null) {
+                    showAutoLabelDialog(sessionId, startTime)
+                } else {
+                    if (!isScanInProgress) updatePendingCount()
+                }
             }
         }
 
@@ -297,10 +380,51 @@ class MainActivity : AppCompatActivity() {
         return saved.ifEmpty { DEFAULT_SERVER_URL }
     }
 
+    private fun showAutoLabelDialog(sessionId: String, startTime: Date) {
+        val fmt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
+        val endTime = Date()
+        val startStr = fmt.format(startTime)
+        val endStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(endTime)
+        val autoLabel = "$startStr~$endStr"
+
+        val editText = com.google.android.material.textfield.TextInputEditText(this).apply {
+            setText(autoLabel)
+            setPadding(48, 24, 48, 24)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("ラベルを設定しますか？")
+            .setView(editText)
+            .setPositiveButton("そのまま保存") { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { ScanStore.updateLabelBySessionId(this@MainActivity, sessionId, autoLabel) }
+                    updatePendingCount()
+                }
+            }
+            .setNegativeButton("変更して保存") { _, _ ->
+                val customLabel = editText.text?.toString()?.trim()?.ifEmpty { autoLabel } ?: autoLabel
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { ScanStore.updateLabelBySessionId(this@MainActivity, sessionId, customLabel) }
+                    updatePendingCount()
+                }
+            }
+            .setCancelable(false)
+            .show()
+    }
+
     private fun updatePendingCount() {
         val count = ScanStore.count(this)
-        tvStatus.text = if (count == 0) "スキャン待機中" else "未送信スキャン数: ${count}回"
+        tvStatus.text = if (count == 0) {
+            "スキャン待機中"
+        } else {
+            val byLabel = ScanStore.countByLabel(this)
+            buildString {
+                append("未送信スキャン数: ${count}回\n")
+                byLabel.forEach { (label, n) -> append("  $label: ${n}回\n") }
+            }.trimEnd()
+        }
         btnSendPending.isEnabled = count > 0 && !isScanInProgress
+        btnDiscardPending.isEnabled = count > 0 && !isScanInProgress
     }
 
     private fun getOrCreateDeviceUuid(): String {
@@ -385,14 +509,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun startScan() {
         if (isScanInProgress) return
+        if (!wifiManager.isWifiEnabled) {
+            Toast.makeText(this, "WiFiがオフです。スキャンできません", Toast.LENGTH_SHORT).show()
+            return
+        }
         isScanInProgress = true
         btnScan.isEnabled = false
         tvStatus.text = "スキャン中..."
         @Suppress("DEPRECATION")
         val started = wifiManager.startScan()
         if (!started) {
-            Toast.makeText(this, "スキャンがスロットリングされています。キャッシュ結果を使用します", Toast.LENGTH_SHORT).show()
-            onScanResultsReady()
+            isScanInProgress = false
+            btnScan.isEnabled = true
+            Toast.makeText(this, "スキャンがスロットリングされています。しばらく待ってから再試行してください", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -431,9 +560,10 @@ class MainActivity : AppCompatActivity() {
         val snapshotList = apList.toList()
         val scanId = UUID.randomUUID().toString()
         val currentScanCount = apList.size
+        val label = autoScanSessionId ?: ""
 
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) { saveToPending(snapshotList, location, scanId) }
+            withContext(Dispatchers.IO) { saveToPending(snapshotList, location, scanId, label) }
             val totalRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
             if (currentScanCount > 0) {
                 tvSsidCount.text = "今回検出: ${currentScanCount}件\n未送信データ合計: ${totalRecords}件"
@@ -459,7 +589,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveToPending(accessPoints: List<AccessPoint>, location: Location?, scanId: String) {
+    private fun saveToPending(accessPoints: List<AccessPoint>, location: Location?, scanId: String, label: String) {
         val timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
         val apArray = JSONArray()
         for (ap in accessPoints) {
@@ -486,6 +616,7 @@ class MainActivity : AppCompatActivity() {
                 put("android_api", Build.VERSION.SDK_INT)
             })
             put("scanned_at", timestamp)
+            put("label", label)
             if (location != null) {
                 put("location", JSONObject().apply {
                     put("latitude", location.latitude)
@@ -568,7 +699,7 @@ class ApAdapter(private val items: List<AccessPoint>) : RecyclerView.Adapter<ApA
         holder.tvBssid.text = ap.bssid
         holder.tvSsids.text = if (ap.ssids.isEmpty()) "(非公開)" else ap.ssids.joinToString(" / ")
         holder.tvSignal.text = "${ap.rssiDbm} dBm  |  ${ap.band}  |  ${ap.channelWidthMhz}MHz幅"
-        holder.tvStandard.text = ap.wifiStandard
+        holder.tvStandard.text = "${ap.wifiStandard} (${ap.wifiStandardCode})"
         holder.tvSecurity.text = ap.security
     }
 
