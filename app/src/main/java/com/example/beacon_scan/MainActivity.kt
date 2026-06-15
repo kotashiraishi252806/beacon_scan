@@ -131,6 +131,18 @@ object ScanStore {
     fun clearAll(context: Context) {
         File(context.filesDir, PENDING_FILE).delete()
     }
+
+    fun removeByLabels(context: Context, labelsToRemove: Set<String>) {
+        val all = load(context)
+        val remaining = JSONArray()
+        for (i in 0 until all.length()) {
+            val obj = all.getJSONObject(i)
+            val label = obj.optString("label").ifEmpty { "（ラベルなし）" }
+            if (label !in labelsToRemove) remaining.put(obj)
+        }
+        if (remaining.length() == 0) File(context.filesDir, PENDING_FILE).delete()
+        else File(context.filesDir, PENDING_FILE).writeText(remaining.toString())
+    }
 }
 
 class MainActivity : AppCompatActivity() {
@@ -147,7 +159,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var switchSendMode: SwitchCompat
     private lateinit var etUrl: TextInputEditText
     private lateinit var tvEmpty: TextView
-    private lateinit var tvStatus: TextView
+    private lateinit var tvAutoScanStatus: TextView
+    private lateinit var tvPendingCount: TextView
     private lateinit var tvSsidCount: TextView
     private val apList = mutableListOf<AccessPoint>()
     private lateinit var adapter: ApAdapter
@@ -191,7 +204,7 @@ class MainActivity : AppCompatActivity() {
             startScan()
         } else {
             isScanInProgress = false
-            btnScan.isEnabled = true
+            btnScan.isEnabled = !switchAutoScan.isChecked
             Toast.makeText(this, "位置情報の権限が必要です", Toast.LENGTH_LONG).show()
         }
     }
@@ -219,7 +232,8 @@ class MainActivity : AppCompatActivity() {
         switchSendMode = findViewById(R.id.switchSendMode)
         etUrl = findViewById(R.id.etUrl)
         tvEmpty = findViewById(R.id.tvEmpty)
-        tvStatus = findViewById(R.id.tvPending)
+        tvAutoScanStatus = findViewById(R.id.tvAutoScanStatus)
+        tvPendingCount = findViewById(R.id.tvPendingCount)
         tvSsidCount = findViewById(R.id.tvSsidCount)
 
         val prefs2 = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -263,34 +277,15 @@ class MainActivity : AppCompatActivity() {
             btnSendPending.isEnabled = false
             btnScan.isEnabled = false
             lifecycleScope.launch {
-                tvStatus.text = "送信中..."
                 trySendAllPending()
-                val remainingCount = withContext(Dispatchers.IO) { ScanStore.count(this@MainActivity) }
-                if (remainingCount == 0) {
-                    tvSsidCount.visibility = View.GONE
-                } else {
-                    val remainingRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
-                    if (tvSsidCount.visibility == View.VISIBLE) {
-                        val firstLine = tvSsidCount.text.lines().firstOrNull() ?: ""
-                        tvSsidCount.text = "$firstLine\n未送信データ合計: ${remainingRecords}件"
-                    }
-                }
-                btnScan.isEnabled = !isScanInProgress
+                hideScanResultsView()
+                btnScan.isEnabled = !isScanInProgress && !switchAutoScan.isChecked
                 updatePendingCount()
             }
         }
 
         btnDiscardPending.setOnClickListener {
-            AlertDialog.Builder(this)
-                .setTitle("未送信データの破棄")
-                .setMessage("未送信データをすべて削除します。この操作は取り消せません。")
-                .setPositiveButton("破棄する") { _, _ ->
-                    ScanStore.clearAll(this)
-                    tvSsidCount.visibility = View.GONE
-                    updatePendingCount()
-                }
-                .setNegativeButton("キャンセル", null)
-                .show()
+            showDiscardSelectionDialog()
         }
 
         btnPauseAutoScan.setOnClickListener {
@@ -298,11 +293,11 @@ class MainActivity : AppCompatActivity() {
                 autoScanHandler.removeCallbacks(autoScanRunnable)
                 isAutoScanPaused = true
                 btnPauseAutoScan.text = "再開"
-                tvStatus.text = "自動スキャン 一時停止中"
+                tvAutoScanStatus.text = "測定停止中"
             } else {
                 isAutoScanPaused = false
                 btnPauseAutoScan.text = "一時停止"
-                tvStatus.text = "自動スキャン ON (10秒間隔)"
+                tvAutoScanStatus.text = "自動測定中"
                 if (!isScanInProgress) {
                     autoScanHandler.postDelayed(autoScanRunnable, AUTO_SCAN_INTERVAL_MS)
                 }
@@ -316,14 +311,18 @@ class MainActivity : AppCompatActivity() {
                 isAutoScanPaused = false
                 btnPauseAutoScan.text = "一時停止"
                 btnPauseAutoScan.visibility = View.VISIBLE
+                btnScan.isEnabled = false
                 if (!isScanInProgress) {
                     autoScanHandler.postDelayed(autoScanRunnable, AUTO_SCAN_INTERVAL_MS)
                 }
-                tvStatus.text = "自動スキャン ON (10秒間隔)"
+                tvAutoScanStatus.text = "自動測定中"
+                tvAutoScanStatus.visibility = View.VISIBLE
             } else {
                 autoScanHandler.removeCallbacks(autoScanRunnable)
                 isAutoScanPaused = false
                 btnPauseAutoScan.visibility = View.GONE
+                btnScan.isEnabled = !isScanInProgress
+                tvAutoScanStatus.visibility = View.GONE
                 val sessionId = autoScanSessionId
                 val startTime = autoScanStartTime
                 autoScanSessionId = null
@@ -412,16 +411,48 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun showDiscardSelectionDialog() {
+        val byLabel = ScanStore.countByLabel(this)
+        if (byLabel.isEmpty()) return
+        val labels = byLabel.keys.toList()
+        val counts = labels.map { byLabel[it] ?: 0 }
+        val checked = BooleanArray(labels.size) { false }
+        val items = labels.mapIndexed { i, label -> "$label (${counts[i]}回)" }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("破棄するデータを選択")
+            .setMultiChoiceItems(items, checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setPositiveButton("破棄する") { _, _ ->
+                val selectedLabels = labels.filterIndexed { i, _ -> checked[i] }.toSet()
+                if (selectedLabels.isEmpty()) return@setPositiveButton
+                ScanStore.removeByLabels(this, selectedLabels)
+                val remaining = ScanStore.count(this)
+                if (remaining == 0) tvSsidCount.visibility = View.GONE
+                updatePendingCount()
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
+    }
+
+    private fun hideScanResultsView() {
+        tvSsidCount.visibility = View.GONE
+        btnToggleList.visibility = View.GONE
+        recyclerView.visibility = View.GONE
+    }
+
     private fun updatePendingCount() {
         val count = ScanStore.count(this)
-        tvStatus.text = if (count == 0) {
-            "スキャン待機中"
+        if (count == 0) {
+            tvPendingCount.visibility = View.GONE
         } else {
             val byLabel = ScanStore.countByLabel(this)
-            buildString {
+            tvPendingCount.text = buildString {
                 append("未送信スキャン数: ${count}回\n")
                 byLabel.forEach { (label, n) -> append("  $label: ${n}回\n") }
             }.trimEnd()
+            tvPendingCount.visibility = View.VISIBLE
         }
         btnSendPending.isEnabled = count > 0 && !isScanInProgress
         btnDiscardPending.isEnabled = count > 0 && !isScanInProgress
@@ -515,12 +546,11 @@ class MainActivity : AppCompatActivity() {
         }
         isScanInProgress = true
         btnScan.isEnabled = false
-        tvStatus.text = "スキャン中..."
         @Suppress("DEPRECATION")
         val started = wifiManager.startScan()
         if (!started) {
             isScanInProgress = false
-            btnScan.isEnabled = true
+            btnScan.isEnabled = !switchAutoScan.isChecked
             Toast.makeText(this, "スキャンがスロットリングされています。しばらく待ってから再試行してください", Toast.LENGTH_SHORT).show()
         }
     }
@@ -531,7 +561,7 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
             isScanInProgress = false
-            btnScan.isEnabled = true
+            btnScan.isEnabled = !switchAutoScan.isChecked
             return
         }
 
@@ -571,16 +601,12 @@ class MainActivity : AppCompatActivity() {
             updatePendingCount()
 
             if (switchSendMode.isChecked) {
-                tvStatus.text = "送信中..."
                 trySendAllPending()
-                val remainingRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
-                if (currentScanCount > 0) {
-                    tvSsidCount.text = "今回検出: ${currentScanCount}件\n未送信データ合計: ${remainingRecords}件"
-                }
+                hideScanResultsView()
             }
 
             isScanInProgress = false
-            btnScan.isEnabled = true
+            btnScan.isEnabled = !switchAutoScan.isChecked
             updatePendingCount()
 
             if (switchAutoScan.isChecked) {
@@ -641,7 +667,6 @@ class MainActivity : AppCompatActivity() {
 
         for (i in 0 until total) {
             val singleArray = JSONArray().put(pending.getJSONObject(i))
-            tvStatus.text = "送信中... (${i + 1}/${total}件)"
 
             val success = withContext(Dispatchers.IO) {
                 runCatching {
@@ -665,15 +690,12 @@ class MainActivity : AppCompatActivity() {
             if (success) {
                 withContext(Dispatchers.IO) { ScanStore.removeFirst(this@MainActivity) }
             } else {
-                val remaining = withContext(Dispatchers.IO) { ScanStore.count(this@MainActivity) }
-                tvStatus.text = "未送信: ${remaining}件 (送信失敗)"
                 Toast.makeText(this, "送信失敗 — 次回スキャン時に再送します", Toast.LENGTH_SHORT).show()
                 updatePendingCount()
                 return
             }
         }
 
-        tvStatus.text = "送信成功 (計${total}件)"
         Toast.makeText(this, "送信成功 (計${total}件)", Toast.LENGTH_SHORT).show()
         updatePendingCount()
     }

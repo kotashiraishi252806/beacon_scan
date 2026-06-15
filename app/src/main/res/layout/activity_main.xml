@@ -99,16 +99,30 @@
         app:layout_constraintBaseline_toBaselineOf="@id/btnSendPending" />
 
     <TextView
-        android:id="@+id/tvPending"
+        android:id="@+id/tvAutoScanStatus"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
         android:layout_marginTop="4dp"
         android:textSize="13sp"
         android:textColor="?android:attr/textColorSecondary"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btnSendPending" />
+
+    <TextView
+        android:id="@+id/tvPendingCount"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="2dp"
+        android:textSize="13sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvAutoScanStatus" />
 
     <TextView
         android:id="@+id/tvSsidCount"
@@ -120,7 +134,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toStartOf="@id/btnToggleList"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvPending"
+        app:layout_constraintTop_toBottomOf="@id/tvPendingCount"
         app:layout_constraintBaseline_toBaselineOf="@id/btnToggleList" />
 
     <Button
@@ -133,7 +147,7 @@
         android:text="一覧"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvPending" />
+        app:layout_constraintTop_toBottomOf="@id/tvPendingCount" />
 
     <TextView
         android:id="@+id/tvEmpty"
