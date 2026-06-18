@@ -482,12 +482,19 @@ class MainActivity : AppCompatActivity() {
         else -> "Unknown"
     }
 
-    private fun getSecurity(capabilities: String): String = when {
-        capabilities.contains("WPA3") -> "WPA3"
-        capabilities.contains("WPA2") -> "WPA2"
-        capabilities.contains("WPA")  -> "WPA"
-        capabilities.contains("WEP")  -> "WEP"
-        else -> "Open"
+    private fun getSecurity(capabilities: String): String {
+        val hasWPA2 = capabilities.contains("WPA2")
+        val hasSAE  = capabilities.contains("SAE")
+        return when {
+            hasWPA2 && hasSAE                                          -> "WPA2/WPA3"
+            capabilities.contains("WPA3") || hasSAE
+                || capabilities.contains("OWE-")
+                || capabilities.contains("EAP_SUITE_B")               -> "WPA3"
+            hasWPA2                                                    -> "WPA2"
+            capabilities.contains("WPA")                              -> "WPA"
+            capabilities.contains("WEP")                              -> "WEP"
+            else                                                       -> "Open"
+        }
     }
 
     @Suppress("DEPRECATION")
