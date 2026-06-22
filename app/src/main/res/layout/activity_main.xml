@@ -43,7 +43,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
-        android:text="自動スキャン (10秒間隔)"
+        android:text="自動スキャン (5秒間隔)"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btnScan" />
 
@@ -153,11 +153,11 @@
         android:id="@+id/tvEmpty"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="スキャンボタン：ボタンをクリックで手動で測定\n自動スキャントグル：ONで10秒間隔で自動測定"
+        android:text="スキャンボタン：ボタンをクリックで手動で測定\n自動スキャントグル：ONで5秒間隔で自動測定"
         android:textSize="16sp"
         android:textColor="?android:attr/textColorSecondary"
         android:visibility="visible"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/btnHelp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvSsidCount" />
@@ -169,9 +169,21 @@
         android:clipToPadding="false"
         android:paddingBottom="8dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/btnHelp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvSsidCount" />
+
+    <ImageButton
+        android:id="@+id/btnHelp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:src="@drawable/ic_help"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="ヘルプ"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

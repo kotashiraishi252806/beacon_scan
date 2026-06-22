@@ -59,10 +59,11 @@ private const val KEY_DEVICE_UUID = "device_uuid"
 private const val KEY_SERVER_URL = "server_url"
 private const val KEY_SEND_MODE = "send_mode"
 private const val PENDING_FILE = "pending_scans.json"
-private const val AUTO_SCAN_INTERVAL_MS = 10_000L
+private const val AUTO_SCAN_INTERVAL_MS = 5_000L
 
 data class AccessPoint(
     val bssid: String,
+    val mldMacAddress: String?,
     val oui: String,
     val ssids: List<String>,
     val rssiDbm: Int,
@@ -150,6 +151,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var wifiManager: WifiManager
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var recyclerView: RecyclerView
+    private lateinit var btnHelp: android.widget.ImageButton
     private lateinit var btnScan: Button
     private lateinit var btnSendPending: Button
     private lateinit var btnDiscardPending: Button
@@ -176,6 +178,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var isScanInProgress = false
+    private var isProgrammaticSendModeChange = false
     private var autoScanSessionId: String? = null
     private var autoScanStartTime: Date? = null
     private var isAutoScanPaused = false
@@ -223,6 +226,7 @@ class MainActivity : AppCompatActivity() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         recyclerView = findViewById(R.id.recyclerView)
+        btnHelp = findViewById(R.id.btnHelp)
         btnScan = findViewById(R.id.btnScan)
         btnSendPending = findViewById(R.id.btnSendPending)
         btnDiscardPending = findViewById(R.id.btnDiscardPending)
@@ -239,8 +243,10 @@ class MainActivity : AppCompatActivity() {
         val prefs2 = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         switchSendMode.isChecked = prefs2.getBoolean(KEY_SEND_MODE, true)
         switchSendMode.setOnCheckedChangeListener { _, isChecked ->
-            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit().putBoolean(KEY_SEND_MODE, isChecked).apply()
+            if (!isProgrammaticSendModeChange) {
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit().putBoolean(KEY_SEND_MODE, isChecked).apply()
+            }
             if (!isChecked) updatePendingCount()
         }
 
@@ -265,6 +271,8 @@ class MainActivity : AppCompatActivity() {
             if (actionId == EditorInfo.IME_ACTION_DONE) saveUrl()
             false
         }
+
+        btnHelp.setOnClickListener { showHelpDialog() }
 
         btnScan.setOnClickListener {
             saveUrl()
@@ -312,6 +320,10 @@ class MainActivity : AppCompatActivity() {
                 btnPauseAutoScan.text = "一時停止"
                 btnPauseAutoScan.visibility = View.VISIBLE
                 btnScan.isEnabled = false
+                isProgrammaticSendModeChange = true
+                switchSendMode.isChecked = false
+                isProgrammaticSendModeChange = false
+                switchSendMode.isEnabled = false
                 if (!isScanInProgress) {
                     autoScanHandler.postDelayed(autoScanRunnable, AUTO_SCAN_INTERVAL_MS)
                 }
@@ -322,6 +334,7 @@ class MainActivity : AppCompatActivity() {
                 isAutoScanPaused = false
                 btnPauseAutoScan.visibility = View.GONE
                 btnScan.isEnabled = !isScanInProgress
+                switchSendMode.isEnabled = true
                 tvAutoScanStatus.visibility = View.GONE
                 val sessionId = autoScanSessionId
                 val startTime = autoScanStartTime
@@ -363,6 +376,98 @@ class MainActivity : AppCompatActivity() {
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
             if (location != null && latestLocation == null) latestLocation = location
         }
+    }
+
+    private fun showHelpDialog() {
+        val msg = """
+【概要】
+周辺の無線LANアクセスポイント（AP）をスキャンし、測定データをサーバーへ送信します。
+
+━━━━━━━━━━━━━━━━━━
+【スキャン単位の情報】
+━━━━━━━━━━━━━━━━━━
+■ scan_id
+　スキャン1回ごとに生成するUUID。
+
+■ device_id
+　端末を識別するUUID。初回起動時に生成し永続保持。
+
+■ device（manufacturer / model / android_api）
+　端末のメーカー・機種名・APIレベル。常に取得可能。
+
+■ scanned_at
+　スキャン実行時刻（ISO 8601形式）。常に取得可能。
+
+■ label
+　自動スキャンのセッション単位で付与する識別ラベル。手動スキャンは空文字。
+
+■ location（latitude / longitude / accuracy_m）
+　GPS位置情報。取得できない場合は null。
+　取得には ACCESS_FINE_LOCATION 権限が必要。
+
+━━━━━━━━━━━━━━━━━━
+【APごとの情報】
+━━━━━━━━━━━━━━━━━━
+■ bssid
+　APを識別するMACアドレス。常に取得可能。
+
+■ mld_mac_address
+　WiFi 7物理AP（MLD）のMACアドレス。
+　null条件：端末がAPI 33未満、またはAPがWiFi 7 MLO非対応。
+
+■ oui
+　BSSIDの先頭3オクテット（ベンダー識別子）。BSSIDから常に導出可能。
+
+■ ssids
+　このBSSIDが発しているSSID一覧。非公開APの場合は空配列。
+
+■ rssi_dbm
+　電波強度（dBm）。値が大きいほど強い（例：-55 > -80）。常に取得可能。
+
+■ frequency_mhz
+　使用周波数（MHz）。常に取得可能。
+
+■ band
+　frequency_mhzから導出した帯域（2.4GHz / 5GHz / 6GHz）。
+
+■ channel_width_mhz
+　チャネル幅（20 / 40 / 80 / 160 / 320 MHz）。常に取得可能。
+
+■ wifi_standard / wifi_standard_code
+　Wi-Fi世代（802.11n/ac/ax/be）と対応する整数コード。
+　ScanResult.wifiStandard より取得。API 30以上で正確な値が得られる。
+
+■ security
+　セキュリティ規格（Open / WEP / WPA / WPA2 / WPA3 / WPA2/WPA3）。
+　capabilities_rawの文字列をアプリ側で解析して判定。
+
+■ capabilities_raw
+　OSが組み立てたセキュリティ情報の生文字列。
+　例：[WPA2-PSK-CCMP][RSN-PSK+SAE-CCMP][ESS]
+　Android バージョンや端末・APのドライバにより表現が異なる場合がある。
+
+━━━━━━━━━━━━━━━━━━
+【設計方針】
+━━━━━━━━━━━━━━━━━━
+取得できない指標は null で送信します。
+フィールドの追加は null 許容で後方互換を維持し、
+大幅な構造変更時のみ schema_version を更新します。
+
+━━━━━━━━━━━━━━━━━━
+【現状の限界】
+━━━━━━━━━━━━━━━━━━
+・物理AP台数は正確にカウントできない
+　MLD MACはMLO対応WiFi 7 APのみ取得可能。
+　同一物理APでもSSIDごとに別MLD MACが付く場合がある。
+
+・スリープ中はスキャンが止まる場合がある
+        """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("このアプリについて")
+            .setMessage(msg)
+            .setPositiveButton("閉じる", null)
+            .show()
     }
 
     private fun saveUrl() {
@@ -516,8 +621,12 @@ class MainActivity : AppCompatActivity() {
                 5                                       -> 320
                 else                                    -> 20
             }
+            val mldMac = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                representative.apMldMacAddress?.toString()
+            } else null
             AccessPoint(
                 bssid = bssid,
+                mldMacAddress = mldMac,
                 oui = bssid.take(8),
                 ssids = ssids,
                 rssiDbm = representative.level,
@@ -628,6 +737,7 @@ class MainActivity : AppCompatActivity() {
         for (ap in accessPoints) {
             apArray.put(JSONObject().apply {
                 put("bssid", ap.bssid)
+                put("mld_mac_address", ap.mldMacAddress ?: JSONObject.NULL)
                 put("oui", ap.oui)
                 put("ssids", JSONArray(ap.ssids))
                 put("rssi_dbm", ap.rssiDbm)
@@ -725,7 +835,7 @@ class ApAdapter(private val items: List<AccessPoint>) : RecyclerView.Adapter<ApA
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val ap = items[position]
-        holder.tvBssid.text = ap.bssid
+        holder.tvBssid.text = if (ap.mldMacAddress != null) "${ap.bssid}  (MLD: ${ap.mldMacAddress})" else ap.bssid
         holder.tvSsids.text = if (ap.ssids.isEmpty()) "(非公開)" else ap.ssids.joinToString(" / ")
         holder.tvSignal.text = "${ap.rssiDbm} dBm  |  ${ap.band}  |  ${ap.channelWidthMhz}MHz幅"
         holder.tvStandard.text = "${ap.wifiStandard} (${ap.wifiStandardCode})"
