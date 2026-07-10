@@ -170,6 +170,113 @@
 
 ---
 
+## Supplicant 状態測定
+
+スキャンで検出したAP n台それぞれに順番に接続試行し、supplicant state（WiFi接続プロセスの状態遷移）を記録する機能です。
+
+### 前提条件
+
+- 事前にスキャンを1回実施していること
+- 自動スキャンがOFFであること
+
+### 操作手順
+
+1. スキャン実行後、**「Supplicant 測定」ボタン**が画面に表示される
+2. ボタンをタップすると測定画面が開く
+3. 検出されたAP n台に対して順番に自動で接続試行する
+4. 各APの状態遷移がリアルタイムでカードに追加される
+5. 測定中は**停止ボタン**でいつでも中断可能
+6. 完了後、結果は元のスキャンデータ（`scan_id`）に紐付けて自動保存される
+
+### 画面の見かた
+
+各APのカードに表示される内容：
+
+| 表示 | 内容 |
+|---|---|
+| AP番号 / SSID / 最終状態 | APの識別情報と接続試行の結果 |
+| BSSID | APのMACアドレス |
+| 状態遷移 | `DISCONNECTED → SCANNING → AUTHENTICATING → ...` の遷移列 |
+| 経過時間 | 接続試行にかかった時間（ms） |
+
+最終状態の色：
+
+| 色 | 状態 | 意味 |
+|---|---|---|
+| 緑 | COMPLETED | 接続成功 |
+| オレンジ | その他 | 途中状態で終了（認証失敗など） |
+| グレー | TIMEOUT / SKIPPED | 応答なし または 非対応 |
+
+### セキュリティ別の動作
+
+| セキュリティ | 動作 |
+|---|---|
+| Open | そのまま接続試行（COMPLETEDに到達可能） |
+| WPA2 / WPA | ダミーパスワードで接続試行（4-way handshake失敗まで記録） |
+| WPA3 / WPA2+WPA3 | ダミーパスワード（SAE）で接続試行 |
+| OWE（Enhanced Open） | Enhanced Openとして接続試行 |
+| WEP / EAP-Enterprise | 非対応のためSKIPPED |
+
+### タイムアウト
+
+1台あたり最大5秒。応答がなければTIMEOUTとして次のAPへ移行します。
+
+### 注意事項
+
+- 自動スキャン中は使用不可（自動スキャンをOFFにしてから実行）
+- WPA2/WPA3のAPは意図的に誤ったパスワードで接続するため認証は失敗する。これは仕様
+- 測定中は端末のWiFi接続が切り替わるため、インターネット接続が一時的に切断される
+
+### 送信データ形式
+
+Supplicant測定結果は元のスキャンデータに `supplicant_results` として追記されます。
+
+```json
+{
+  "scan_id": "uuid",
+  "access_points": ["..."],
+  "supplicant_results": {
+    "measured_at": "2026-07-10T10:00:00",
+    "detected_ap_count": 5,
+    "results": [
+      {
+        "ap_id": "AP1",
+        "ssid": "MyNetwork",
+        "bssid": "AA:BB:CC:DD:EE:FF",
+        "final_state": "COMPLETED",
+        "failure_reason": null,
+        "state_transitions": [
+          {"state": "DISCONNECTED",  "t": "10:00:01.000"},
+          {"state": "SCANNING",      "t": "10:00:01.100"},
+          {"state": "AUTHENTICATING","t": "10:00:01.150"},
+          {"state": "ASSOCIATING",   "t": "10:00:01.300"},
+          {"state": "ASSOCIATED",    "t": "10:00:01.400"},
+          {"state": "COMPLETED",     "t": "10:00:01.500"}
+        ],
+        "elapsed_ms": 500
+      },
+      {
+        "ap_id": "AP2",
+        "ssid": "CorpWifi",
+        "bssid": "BB:CC:DD:EE:FF:00",
+        "final_state": "FOUR_WAY_HANDSHAKE",
+        "failure_reason": "timeout_at_FOUR_WAY_HANDSHAKE",
+        "state_transitions": [
+          {"state": "DISCONNECTED",     "t": "10:00:06.000"},
+          {"state": "SCANNING",         "t": "10:00:06.100"},
+          {"state": "ASSOCIATING",      "t": "10:00:06.300"},
+          {"state": "ASSOCIATED",       "t": "10:00:06.500"},
+          {"state": "FOUR_WAY_HANDSHAKE","t": "10:00:06.600"}
+        ],
+        "elapsed_ms": 5001
+      }
+    ]
+  }
+}
+```
+
+---
+
 ## 注意事項
 
 - スキャンにはAndroidの位置情報権限（ACCESS_FINE_LOCATION）が必要です

@@ -144,6 +144,27 @@ object ScanStore {
         if (remaining.length() == 0) File(context.filesDir, PENDING_FILE).delete()
         else File(context.filesDir, PENDING_FILE).writeText(remaining.toString())
     }
+
+    fun addSupplicantResults(context: Context, scanId: String, supplicantJson: JSONObject) {
+        val all = load(context)
+        var found = false
+        for (i in 0 until all.length()) {
+            val obj = all.getJSONObject(i)
+            if (obj.optString("scan_id") == scanId) {
+                obj.put("supplicant_results", supplicantJson)
+                found = true
+                break
+            }
+        }
+        if (!found) {
+            all.put(JSONObject().apply {
+                put("scan_id", scanId)
+                put("type", "supplicant_only")
+                put("supplicant_results", supplicantJson)
+            })
+        }
+        File(context.filesDir, PENDING_FILE).writeText(all.toString())
+    }
 }
 
 class MainActivity : AppCompatActivity() {
@@ -157,6 +178,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnDiscardPending: Button
     private lateinit var btnPauseAutoScan: Button
     private lateinit var btnToggleList: Button
+    private lateinit var btnSupplicantScan: Button
     private lateinit var switchAutoScan: SwitchCompat
     private lateinit var switchSendMode: SwitchCompat
     private lateinit var etUrl: TextInputEditText
@@ -166,6 +188,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSsidCount: TextView
     private val apList = mutableListOf<AccessPoint>()
     private lateinit var adapter: ApAdapter
+    private var latestScanId: String? = null
 
     private var latestLocation: Location? = null
     private val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, AUTO_SCAN_INTERVAL_MS)
@@ -232,6 +255,7 @@ class MainActivity : AppCompatActivity() {
         btnDiscardPending = findViewById(R.id.btnDiscardPending)
         btnPauseAutoScan = findViewById(R.id.btnPauseAutoScan)
         btnToggleList = findViewById(R.id.btnToggleList)
+        btnSupplicantScan = findViewById(R.id.btnSupplicantScan)
         switchAutoScan = findViewById(R.id.switchAutoScan)
         switchSendMode = findViewById(R.id.switchSendMode)
         etUrl = findViewById(R.id.etUrl)
@@ -262,6 +286,36 @@ class MainActivity : AppCompatActivity() {
                 recyclerView.visibility = View.VISIBLE
                 btnToggleList.text = "閉じる"
             }
+        }
+
+        btnSupplicantScan.setOnClickListener {
+            if (switchAutoScan.isChecked) {
+                Toast.makeText(this, "自動スキャン中はSupplicant測定できません", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val scanId = latestScanId ?: return@setOnClickListener
+            val apJson = org.json.JSONArray().also { arr ->
+                apList.forEach { ap ->
+                    arr.put(org.json.JSONObject().apply {
+                        put("bssid", ap.bssid)
+                        put("mld_mac_address", ap.mldMacAddress ?: "")
+                        put("oui", ap.oui)
+                        put("ssids", org.json.JSONArray(ap.ssids))
+                        put("rssi_dbm", ap.rssiDbm)
+                        put("frequency_mhz", ap.frequencyMhz)
+                        put("band", ap.band)
+                        put("channel_width_mhz", ap.channelWidthMhz)
+                        put("wifi_standard", ap.wifiStandard)
+                        put("wifi_standard_code", ap.wifiStandardCode)
+                        put("security", ap.security)
+                        put("capabilities_raw", ap.capabilitiesRaw)
+                    })
+                }
+            }.toString()
+            startActivity(Intent(this, SupplicantScanActivity::class.java).apply {
+                putExtra(SupplicantScanActivity.EXTRA_SCAN_ID, scanId)
+                putExtra(SupplicantScanActivity.EXTRA_AP_LIST_JSON, apJson)
+            })
         }
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -356,6 +410,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         startLocationUpdates()
+        updatePendingCount()
     }
 
     override fun onPause() {
@@ -445,6 +500,36 @@ class MainActivity : AppCompatActivity() {
 　OSが組み立てたセキュリティ情報の生文字列。
 　例：[WPA2-PSK-CCMP][RSN-PSK+SAE-CCMP][ESS]
 　Android バージョンや端末・APのドライバにより表現が異なる場合がある。
+
+━━━━━━━━━━━━━━━━━━
+【Supplicant 状態測定】
+━━━━━━━━━━━━━━━━━━
+スキャンで検出したAP n台へ順番に接続試行し、
+WiFi接続プロセスの状態遷移を記録する機能。
+
+■ 使い方
+　1. スキャン実行後に表示される「Supplicant 測定」ボタンをタップ
+　2. AP n台に対して自動で順番に接続試行
+　3. 完了後、元のスキャンデータに supplicant_results として保存
+
+■ 状態遷移の例（Open AP）
+　DISCONNECTED → SCANNING → AUTHENTICATING
+　→ ASSOCIATING → ASSOCIATED → COMPLETED
+
+■ 状態遷移の例（WPA2 AP・パスワード不明）
+　DISCONNECTED → SCANNING → ASSOCIATING
+　→ ASSOCIATED → FOUR_WAY_HANDSHAKE → DISCONNECTED
+
+■ セキュリティ別の動作
+　Open       : そのまま接続（COMPLETED到達可能）
+　WPA2/WPA   : ダミーパスワードで試行（ハンドシェイク失敗まで記録）
+　WPA3       : ダミーパスワード（SAE）で試行
+　WEP/EAP   : 非対応のためSKIPPED
+
+■ 制約
+　・自動スキャン中は使用不可
+　・1台あたり最大5秒タイムアウト
+　・測定中は端末のWiFi接続が一時的に切り替わる
 
 ━━━━━━━━━━━━━━━━━━
 【設計方針】
@@ -544,6 +629,7 @@ class MainActivity : AppCompatActivity() {
     private fun hideScanResultsView() {
         tvSsidCount.visibility = View.GONE
         btnToggleList.visibility = View.GONE
+        btnSupplicantScan.visibility = View.GONE
         recyclerView.visibility = View.GONE
     }
 
@@ -691,12 +777,14 @@ class MainActivity : AppCompatActivity() {
         if (apList.isEmpty()) {
             tvSsidCount.visibility = View.GONE
             btnToggleList.visibility = View.GONE
+            btnSupplicantScan.visibility = View.GONE
             recyclerView.visibility = View.GONE
             tvEmpty.visibility = View.VISIBLE
         } else {
             tvSsidCount.text = "今回検出: ${apList.size}件\n未送信データ合計: 集計中..."
             tvSsidCount.visibility = View.VISIBLE
             btnToggleList.visibility = View.VISIBLE
+            btnSupplicantScan.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
             btnToggleList.text = "一覧"
             tvEmpty.visibility = View.GONE
@@ -705,6 +793,7 @@ class MainActivity : AppCompatActivity() {
         val location = latestLocation
         val snapshotList = apList.toList()
         val scanId = UUID.randomUUID().toString()
+        latestScanId = scanId
         val currentScanCount = apList.size
         val label = autoScanSessionId ?: ""
 

@@ -149,6 +149,18 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvPendingCount" />
 
+    <Button
+        android:id="@+id/btnSupplicantScan"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="4dp"
+        android:text="Supplicant 測定"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnToggleList" />
+
     <TextView
         android:id="@+id/tvEmpty"
         android:layout_width="wrap_content"
@@ -160,7 +172,7 @@
         app:layout_constraintBottom_toTopOf="@id/btnHelp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvSsidCount" />
+        app:layout_constraintTop_toBottomOf="@id/btnSupplicantScan" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
@@ -172,7 +184,7 @@
         app:layout_constraintBottom_toTopOf="@id/btnHelp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvSsidCount" />
+        app:layout_constraintTop_toBottomOf="@id/btnSupplicantScan" />
 
     <ImageButton
         android:id="@+id/btnHelp"
