@@ -145,8 +145,20 @@
         android:layout_marginTop="4dp"
         android:text="測定中断"
         android:visibility="gone"
+        app:layout_constraintEnd_toStartOf="@id/btnToggleList"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvSsidCount" />
+
+    <Button
+        android:id="@+id/btnSelectAll"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="4dp"
+        android:text="全て選択"
+        android:visibility="gone"
+        app:layout_constraintEnd_toStartOf="@id/btnToggleList"
+        app:layout_constraintBaseline_toBaselineOf="@id/btnToggleList" />
 
     <Button
         android:id="@+id/btnToggleList"
@@ -160,6 +172,19 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvSsidCount" />
 
+    <Button
+        android:id="@+id/btnMeasureSelected"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="4dp"
+        android:text="選択したAPを測定 (0件)"
+        android:enabled="false"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnToggleList" />
+
     <TextView
         android:id="@+id/tvEmpty"
         android:layout_width="wrap_content"
@@ -171,7 +196,7 @@
         app:layout_constraintBottom_toTopOf="@id/btnHelp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnToggleList" />
+        app:layout_constraintTop_toBottomOf="@id/btnMeasureSelected" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
@@ -183,7 +208,7 @@
         app:layout_constraintBottom_toTopOf="@id/btnHelp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnToggleList" />
+        app:layout_constraintTop_toBottomOf="@id/btnMeasureSelected" />
 
     <ImageButton
         android:id="@+id/btnHelp"

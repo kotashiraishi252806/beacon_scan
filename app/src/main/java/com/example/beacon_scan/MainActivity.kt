@@ -14,6 +14,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.wifi.ScanResult
 import android.net.wifi.SupplicantState
+import android.net.wifi.WifiEnterpriseConfig
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
@@ -26,6 +27,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -197,6 +199,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnPauseAutoScan: Button
     private lateinit var btnToggleList: Button
     private lateinit var btnStopMeasurement: Button
+    private lateinit var btnMeasureSelected: Button
+    private lateinit var btnSelectAll: Button
     private lateinit var switchAutoScan: SwitchCompat
     private lateinit var switchSendMode: SwitchCompat
     private lateinit var etUrl: TextInputEditText
@@ -207,6 +211,10 @@ class MainActivity : AppCompatActivity() {
     private val apList = mutableListOf<AccessPoint>()
     private lateinit var adapter: ApAdapter
     private var latestScanId: String? = null
+    private var isInSelectionMode = false
+    private var pendingScanId: String? = null
+    private var pendingLocation: Location? = null
+    private var pendingLabel: String? = null
 
     private var latestLocation: Location? = null
     private val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, AUTO_SCAN_INTERVAL_MS)
@@ -314,6 +322,8 @@ class MainActivity : AppCompatActivity() {
         btnPauseAutoScan = findViewById(R.id.btnPauseAutoScan)
         btnToggleList = findViewById(R.id.btnToggleList)
         btnStopMeasurement = findViewById(R.id.btnStopMeasurement)
+        btnMeasureSelected = findViewById(R.id.btnMeasureSelected)
+        btnSelectAll = findViewById(R.id.btnSelectAll)
         switchAutoScan = findViewById(R.id.switchAutoScan)
         switchSendMode = findViewById(R.id.switchSendMode)
         etUrl = findViewById(R.id.etUrl)
@@ -332,7 +342,13 @@ class MainActivity : AppCompatActivity() {
             if (!isChecked) updatePendingCount()
         }
 
-        adapter = ApAdapter(apList)
+        adapter = ApAdapter(apList) { count ->
+            btnMeasureSelected.text = "選択したAPを測定 (${count}件)"
+            btnMeasureSelected.isEnabled = count > 0
+            if (isInSelectionMode) {
+                btnSelectAll.text = if (adapter.areAllSelected()) "全て解除" else "全て選択"
+            }
+        }
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
@@ -366,10 +382,110 @@ class MainActivity : AppCompatActivity() {
 
         btnHelp.setOnClickListener { showHelpDialog() }
 
+        btnSelectAll.setOnClickListener {
+            if (!isInSelectionMode) return@setOnClickListener
+            if (adapter.areAllSelected()) {
+                adapter.clearSelection()
+                btnSelectAll.text = "全て選択"
+            } else {
+                adapter.selectAll()
+                btnSelectAll.text = "全て解除"
+            }
+        }
+
         btnScan.setOnClickListener {
             saveUrl()
+            if (isInSelectionMode) {
+                isInSelectionMode = false
+                adapter.isSelectionMode = false
+                btnMeasureSelected.visibility = View.GONE
+                btnSelectAll.text = "全て選択"
+            }
             autoScanHandler.removeCallbacks(autoScanRunnable)
             checkPermissionsAndScan()
+        }
+
+        btnMeasureSelected.setOnClickListener {
+            val selectedAps = adapter.getSelectedItems()
+            if (selectedAps.isEmpty()) return@setOnClickListener
+            val scanId = pendingScanId ?: return@setOnClickListener
+            val location = pendingLocation
+            val label = pendingLabel ?: ""
+
+            val count = selectedAps.size
+            AlertDialog.Builder(this)
+                .setTitle("Supplicant測定を開始します")
+                .setMessage(
+                    "選択した ${count} 件のAPを順番に測定します。\n\n" +
+                    "各APごとにAndroidの「接続確認ダイアログ」が表示されます。\n" +
+                    "ダイアログの候補はAP1件ずつ表示されるため、合計 ${count} 回のダイアログ操作が必要です。"
+                )
+                .setPositiveButton("開始") { _, _ ->
+                    isInSelectionMode = false
+                    adapter.isSelectionMode = false
+                    btnMeasureSelected.visibility = View.GONE
+                    btnSelectAll.visibility = View.GONE
+                    btnSelectAll.text = "全て選択"
+                    recyclerView.visibility = View.VISIBLE
+                    btnToggleList.text = "閉じる"
+
+                    val currentScanCount = apList.size
+                    tvSsidCount.text = "今回検出: ${currentScanCount}件\nSupplicant測定中..."
+                    btnStopMeasurement.visibility = View.VISIBLE
+                    btnStopMeasurement.isEnabled = true
+                    btnStopMeasurement.text = "測定中断"
+                    isScanInProgress = true
+
+                    lifecycleScope.launch {
+                        val measuredList = measureAllSupplicant(
+                            selectedAps,
+                            onProgress = { progress, total, name ->
+                                val remaining = total - progress
+                                tvSsidCount.text = "今回検出: ${currentScanCount}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
+                            },
+                            onApStart = { ap ->
+                                val idx = apList.indexOfFirst { it.bssid == ap.bssid }
+                                if (idx > 0) {
+                                    apList.add(0, apList.removeAt(idx))
+                                    adapter.notifyDataSetChanged()
+                                }
+                            },
+                            onApFinished = { result ->
+                                val idx = apList.indexOfFirst { it.bssid == result.bssid }
+                                if (idx >= 0) {
+                                    apList.removeAt(idx)
+                                    apList.add(result)
+                                    adapter.notifyDataSetChanged()
+                                }
+                            }
+                        )
+
+                        btnStopMeasurement.visibility = View.GONE
+                        stopMeasurementRequested = false
+
+                        val measuredByBssid = measuredList.associateBy { it.bssid }
+                        val fullList = apList.map { ap -> measuredByBssid[ap.bssid] ?: ap }
+                        apList.clear()
+                        apList.addAll(fullList)
+                        adapter.notifyDataSetChanged()
+
+                        withContext(Dispatchers.IO) { saveToPending(measuredList, location, scanId, label) }
+                        val totalRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
+                        tvSsidCount.text = "今回検出: ${currentScanCount}件\n未送信データ合計: ${totalRecords}件"
+                        updatePendingCount()
+
+                        if (switchSendMode.isChecked) {
+                            trySendAllPending()
+                            hideScanResultsView()
+                        }
+
+                        isScanInProgress = false
+                        btnScan.isEnabled = true
+                        updatePendingCount()
+                    }
+                }
+                .setNegativeButton("キャンセル", null)
+                .show()
         }
 
         btnSendPending.setOnClickListener {
@@ -406,6 +522,12 @@ class MainActivity : AppCompatActivity() {
 
         switchAutoScan.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
+                if (isInSelectionMode) {
+                    isInSelectionMode = false
+                    adapter.isSelectionMode = false
+                    btnMeasureSelected.visibility = View.GONE
+                    btnSelectAll.text = "全て選択"
+                }
                 autoScanSessionId = UUID.randomUUID().toString()
                 autoScanStartTime = Date()
                 isAutoScanPaused = false
@@ -672,7 +794,13 @@ WiFi接続プロセスの状態遷移を記録する機能。
         tvSsidCount.visibility = View.GONE
         btnToggleList.visibility = View.GONE
         btnStopMeasurement.visibility = View.GONE
+        btnMeasureSelected.visibility = View.GONE
+        btnSelectAll.visibility = View.GONE
         recyclerView.visibility = View.GONE
+        if (isInSelectionMode) {
+            isInSelectionMode = false
+            adapter.isSelectionMode = false
+        }
     }
 
     private fun updatePendingCount() {
@@ -732,7 +860,9 @@ WiFi接続プロセスの状態遷移を記録する機能。
 
     private suspend fun measureAllSupplicant(
         apList: List<AccessPoint>,
-        onProgress: (Int, Int, String) -> Unit
+        onProgress: (Int, Int, String) -> Unit,
+        onApStart: (AccessPoint) -> Unit = {},
+        onApFinished: (AccessPoint) -> Unit = {}
     ): List<AccessPoint> {
         stopMeasurementRequested = false
         val results = mutableListOf<AccessPoint>()
@@ -742,7 +872,10 @@ WiFi接続プロセスの状態遷移を記録する機能。
                 continue
             }
             onProgress(i + 1, apList.size, ap.ssids.firstOrNull() ?: ap.bssid)
-            results.add(measureSupplicantForAp(ap))
+            onApStart(ap)
+            val result = measureSupplicantForAp(ap)
+            results.add(result)
+            onApFinished(result)
             delay(300)
         }
         return results
@@ -862,7 +995,15 @@ WiFi接続プロセスの状態遷移を記録する機能。
         val caps = ap.capabilitiesRaw
         when {
             ap.security == "WEP" -> return null
-            caps.contains("EAP") && !caps.contains("OWE") -> return null
+            caps.contains("EAP") && !caps.contains("OWE") -> {
+                val eapConfig = WifiEnterpriseConfig().apply {
+                    eapMethod = WifiEnterpriseConfig.Eap.PEAP
+                    phase2Method = WifiEnterpriseConfig.Phase2.MSCHAPV2
+                    identity = "DUMMY_USER"
+                    password = DUMMY_PASSPHRASE
+                }
+                builder.setWpa2EnterpriseConfig(eapConfig)
+            }
             caps.contains("OWE") -> builder.setIsEnhancedOpen(true)
             ap.security == "WPA3" || ap.security == "WPA2/WPA3" ->
                 builder.setWpa3Passphrase(DUMMY_PASSPHRASE)
@@ -943,7 +1084,7 @@ WiFi接続プロセスの状態遷移を記録する機能。
     }
 
     private fun onScanResultsReady() {
-        if (!isScanInProgress || isProcessingResults) return
+        if (!isScanInProgress || isProcessingResults || isInSelectionMode) return
         isProcessingResults = true
         val scanElapsedMs = System.currentTimeMillis() - scanStartMs
         Log.d("BeaconScan", "WiFiスキャン完了: ${scanElapsedMs}ms")
@@ -951,6 +1092,7 @@ WiFi接続プロセスの状態遷移を記録する機能。
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
             isScanInProgress = false
+            isProcessingResults = false
             btnScan.isEnabled = !switchAutoScan.isChecked
             return
         }
@@ -960,68 +1102,103 @@ WiFi接続プロセスの状態遷移を記録する機能。
         val grouped = groupByBssid(rawResults)
         apList.clear()
         apList.addAll(grouped)
-        adapter.notifyDataSetChanged()
-
-        if (apList.isEmpty()) {
-            tvSsidCount.visibility = View.GONE
-            btnToggleList.visibility = View.GONE
-            btnStopMeasurement.visibility = View.GONE
-            recyclerView.visibility = View.GONE
-            tvEmpty.visibility = View.VISIBLE
-        } else {
-            tvSsidCount.text = "今回検出: ${apList.size}件\nSupplicant測定中..."
-            tvSsidCount.visibility = View.VISIBLE
-            btnToggleList.visibility = View.VISIBLE
-            btnStopMeasurement.visibility = View.VISIBLE
-            btnStopMeasurement.isEnabled = true
-            btnStopMeasurement.text = "測定中断"
-            recyclerView.visibility = View.GONE
-            btnToggleList.text = "一覧"
-            tvEmpty.visibility = View.GONE
-        }
 
         val location = latestLocation
-        val snapshotList = apList.toList()
         val scanId = UUID.randomUUID().toString()
         latestScanId = scanId
         val currentScanCount = apList.size
         val label = autoScanSessionId ?: ""
 
-        lifecycleScope.launch {
-            val measuredList = if (snapshotList.isNotEmpty()) {
-                measureAllSupplicant(snapshotList) { progress, total, name ->
-                    val remaining = total - progress
-                    tvSsidCount.text = "今回検出: ${total}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
-                }
-            } else snapshotList
-
+        if (apList.isEmpty()) {
+            adapter.isSelectionMode = false
+            tvSsidCount.visibility = View.GONE
+            btnToggleList.visibility = View.GONE
             btnStopMeasurement.visibility = View.GONE
-            stopMeasurementRequested = false
-
-            apList.clear()
-            apList.addAll(measuredList)
-            adapter.notifyDataSetChanged()
-
-            withContext(Dispatchers.IO) { saveToPending(measuredList, location, scanId, label) }
-            val totalRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
-            if (currentScanCount > 0) {
-                tvSsidCount.text = "今回検出: ${currentScanCount}件\n未送信データ合計: ${totalRecords}件"
-            }
-            updatePendingCount()
-
-            if (switchSendMode.isChecked) {
-                trySendAllPending()
-                hideScanResultsView()
-            }
-
+            btnMeasureSelected.visibility = View.GONE
+            btnSelectAll.visibility = View.GONE
+            recyclerView.visibility = View.GONE
+            tvEmpty.visibility = View.VISIBLE
             isScanInProgress = false
             isProcessingResults = false
             btnScan.isEnabled = !switchAutoScan.isChecked
-            updatePendingCount()
+            return
+        }
 
-            if (switchAutoScan.isChecked) {
-                autoScanHandler.postDelayed(autoScanRunnable, AUTO_SCAN_INTERVAL_MS)
+        if (switchAutoScan.isChecked) {
+            adapter.isSelectionMode = false
+            tvSsidCount.text = "今回検出: ${currentScanCount}件\nSupplicant測定中..."
+            tvSsidCount.visibility = View.VISIBLE
+            btnToggleList.visibility = View.VISIBLE
+            btnStopMeasurement.visibility = View.VISIBLE
+            btnStopMeasurement.isEnabled = true
+            btnStopMeasurement.text = "測定中断"
+            btnMeasureSelected.visibility = View.GONE
+            btnSelectAll.visibility = View.GONE
+            btnSelectAll.text = "全て選択"
+            recyclerView.visibility = View.GONE
+            btnToggleList.text = "一覧"
+            tvEmpty.visibility = View.GONE
+
+            val snapshotList = apList.toList()
+            lifecycleScope.launch {
+                val measuredList = measureAllSupplicant(snapshotList, onProgress = { progress, total, name ->
+                    val remaining = total - progress
+                    tvSsidCount.text = "今回検出: ${total}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
+                })
+
+                btnStopMeasurement.visibility = View.GONE
+                stopMeasurementRequested = false
+
+                apList.clear()
+                apList.addAll(measuredList)
+                adapter.notifyDataSetChanged()
+
+                withContext(Dispatchers.IO) { saveToPending(measuredList, location, scanId, label) }
+                val totalRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
+                if (currentScanCount > 0) {
+                    tvSsidCount.text = "今回検出: ${currentScanCount}件\n未送信データ合計: ${totalRecords}件"
+                }
+                updatePendingCount()
+
+                if (switchSendMode.isChecked) {
+                    trySendAllPending()
+                    hideScanResultsView()
+                }
+
+                isScanInProgress = false
+                isProcessingResults = false
+                btnScan.isEnabled = !switchAutoScan.isChecked
+                updatePendingCount()
+
+                if (switchAutoScan.isChecked) {
+                    autoScanHandler.postDelayed(autoScanRunnable, AUTO_SCAN_INTERVAL_MS)
+                }
             }
+        } else {
+            // 手動スキャン：AP選択モードに移行
+            pendingScanId = scanId
+            pendingLocation = location
+            pendingLabel = label
+
+            adapter.isSelectionMode = true
+
+            tvSsidCount.text = "今回検出: ${currentScanCount}件\nAPを選択して「測定」ボタンを押してください"
+            tvSsidCount.visibility = View.VISIBLE
+            btnToggleList.visibility = View.VISIBLE
+            btnToggleList.text = "閉じる"
+            recyclerView.visibility = View.VISIBLE
+            btnStopMeasurement.visibility = View.GONE
+            btnMeasureSelected.text = "選択したAPを測定 (0件)"
+            btnMeasureSelected.isEnabled = false
+            btnMeasureSelected.visibility = View.VISIBLE
+            btnSelectAll.text = "全て選択"
+            btnSelectAll.visibility = View.VISIBLE
+            tvEmpty.visibility = View.GONE
+
+            isInSelectionMode = true
+            isScanInProgress = false
+            isProcessingResults = false
+            btnScan.isEnabled = true
         }
     }
 
@@ -1115,7 +1292,35 @@ WiFi接続プロセスの状態遷移を記録する機能。
     }
 }
 
-class ApAdapter(private val items: List<AccessPoint>) : RecyclerView.Adapter<ApAdapter.ViewHolder>() {
+class ApAdapter(
+    private val items: List<AccessPoint>,
+    private val onSelectionChanged: ((Int) -> Unit)? = null
+) : RecyclerView.Adapter<ApAdapter.ViewHolder>() {
+
+    var isSelectionMode = false
+        set(value) {
+            field = value
+            if (!value) selectedBssids.clear()
+            notifyDataSetChanged()
+        }
+
+    private val selectedBssids = mutableSetOf<String>()
+
+    fun getSelectedItems(): List<AccessPoint> = items.filter { it.bssid in selectedBssids }
+    fun getSelectedCount(): Int = selectedBssids.size
+    fun areAllSelected(): Boolean = items.isNotEmpty() && items.all { it.bssid in selectedBssids }
+
+    fun selectAll() {
+        items.forEach { selectedBssids.add(it.bssid) }
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke(selectedBssids.size)
+    }
+
+    fun clearSelection() {
+        selectedBssids.clear()
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke(0)
+    }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val tvBssid: TextView = view.findViewById(R.id.tvBssid)
@@ -1123,6 +1328,7 @@ class ApAdapter(private val items: List<AccessPoint>) : RecyclerView.Adapter<ApA
         val tvSignal: TextView = view.findViewById(R.id.tvSignal)
         val tvStandard: TextView = view.findViewById(R.id.tvStandard)
         val tvSecurity: TextView = view.findViewById(R.id.tvSecurity)
+        val checkBoxSelect: CheckBox = view.findViewById(R.id.checkBoxSelect)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -1137,6 +1343,20 @@ class ApAdapter(private val items: List<AccessPoint>) : RecyclerView.Adapter<ApA
         holder.tvSignal.text = "${ap.rssiDbm} dBm  |  ${ap.band}  |  ${ap.channelWidthMhz}MHz幅"
         holder.tvStandard.text = "${ap.wifiStandard} (${ap.wifiStandardCode})"
         holder.tvSecurity.text = ap.security
+
+        if (isSelectionMode) {
+            holder.checkBoxSelect.visibility = View.VISIBLE
+            holder.checkBoxSelect.isChecked = ap.bssid in selectedBssids
+            holder.itemView.setOnClickListener {
+                val nowChecked = ap.bssid !in selectedBssids
+                if (nowChecked) selectedBssids.add(ap.bssid) else selectedBssids.remove(ap.bssid)
+                holder.checkBoxSelect.isChecked = nowChecked
+                onSelectionChanged?.invoke(selectedBssids.size)
+            }
+        } else {
+            holder.checkBoxSelect.visibility = View.GONE
+            holder.itemView.setOnClickListener(null)
+        }
     }
 
     override fun getItemCount() = items.size
