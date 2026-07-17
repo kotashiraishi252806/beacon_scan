@@ -229,6 +229,7 @@ class MainActivity : AppCompatActivity() {
     private var isScanInProgress = false
     private var scanStartMs: Long = 0L
     private var isProcessingResults = false
+    private var isManualMeasuring = false
     private var isProgrammaticSendModeChange = false
     private var autoScanSessionId: String? = null
     private var autoScanStartTime: Date? = null
@@ -429,26 +430,33 @@ class MainActivity : AppCompatActivity() {
                     recyclerView.visibility = View.VISIBLE
                     btnToggleList.text = "閉じる"
 
+                    apList.clear()
+                    apList.addAll(selectedAps)
+                    adapter.notifyDataSetChanged()
+
                     val currentScanCount = apList.size
-                    tvSsidCount.text = "今回検出: ${currentScanCount}件\nSupplicant測定中..."
+                    tvSsidCount.text = "選択AP: ${currentScanCount}件\nSupplicant測定中..."
                     btnStopMeasurement.visibility = View.VISIBLE
                     btnStopMeasurement.isEnabled = true
                     btnStopMeasurement.text = "測定中断"
                     isScanInProgress = true
+                    isManualMeasuring = true
+                    adapter.isMeasurementColoring = true
 
                     lifecycleScope.launch {
                         val measuredList = measureAllSupplicant(
                             selectedAps,
                             onProgress = { progress, total, name ->
                                 val remaining = total - progress
-                                tvSsidCount.text = "今回検出: ${currentScanCount}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
+                                tvSsidCount.text = "選択AP: ${currentScanCount}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
                             },
                             onApStart = { ap ->
+                                adapter.measuringBssid = ap.bssid
                                 val idx = apList.indexOfFirst { it.bssid == ap.bssid }
                                 if (idx > 0) {
                                     apList.add(0, apList.removeAt(idx))
-                                    adapter.notifyDataSetChanged()
                                 }
+                                adapter.notifyDataSetChanged()
                             },
                             onApFinished = { result ->
                                 val idx = apList.indexOfFirst { it.bssid == result.bssid }
@@ -462,6 +470,7 @@ class MainActivity : AppCompatActivity() {
 
                         btnStopMeasurement.visibility = View.GONE
                         stopMeasurementRequested = false
+                        adapter.measuringBssid = null
 
                         val measuredByBssid = measuredList.associateBy { it.bssid }
                         val fullList = apList.map { ap -> measuredByBssid[ap.bssid] ?: ap }
@@ -471,7 +480,7 @@ class MainActivity : AppCompatActivity() {
 
                         withContext(Dispatchers.IO) { saveToPending(measuredList, location, scanId, label) }
                         val totalRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@MainActivity) }
-                        tvSsidCount.text = "今回検出: ${currentScanCount}件\n未送信データ合計: ${totalRecords}件"
+                        tvSsidCount.text = "選択AP: ${currentScanCount}件\n未送信データ合計: ${totalRecords}件"
                         updatePendingCount()
 
                         if (switchSendMode.isChecked) {
@@ -480,6 +489,7 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         isScanInProgress = false
+                        isManualMeasuring = false
                         btnScan.isEnabled = true
                         updatePendingCount()
                     }
@@ -1084,7 +1094,7 @@ WiFi接続プロセスの状態遷移を記録する機能。
     }
 
     private fun onScanResultsReady() {
-        if (!isScanInProgress || isProcessingResults || isInSelectionMode) return
+        if (!isScanInProgress || isProcessingResults || isInSelectionMode || isManualMeasuring) return
         isProcessingResults = true
         val scanElapsedMs = System.currentTimeMillis() - scanStartMs
         Log.d("BeaconScan", "WiFiスキャン完了: ${scanElapsedMs}ms")
@@ -1297,6 +1307,9 @@ class ApAdapter(
     private val onSelectionChanged: ((Int) -> Unit)? = null
 ) : RecyclerView.Adapter<ApAdapter.ViewHolder>() {
 
+    var isMeasurementColoring = false
+    var measuringBssid: String? = null
+
     var isSelectionMode = false
         set(value) {
             field = value
@@ -1329,6 +1342,8 @@ class ApAdapter(
         val tvStandard: TextView = view.findViewById(R.id.tvStandard)
         val tvSecurity: TextView = view.findViewById(R.id.tvSecurity)
         val checkBoxSelect: CheckBox = view.findViewById(R.id.checkBoxSelect)
+        val viewMeasuredOverlay: View = view.findViewById(R.id.viewMeasuredOverlay)
+        val tvMeasurementStatus: TextView = view.findViewById(R.id.tvMeasurementStatus)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -1343,6 +1358,15 @@ class ApAdapter(
         holder.tvSignal.text = "${ap.rssiDbm} dBm  |  ${ap.band}  |  ${ap.channelWidthMhz}MHz幅"
         holder.tvStandard.text = "${ap.wifiStandard} (${ap.wifiStandardCode})"
         holder.tvSecurity.text = ap.security
+
+        holder.viewMeasuredOverlay.visibility =
+            if (isMeasurementColoring && ap.supplicantFinalState != "NOT_MEASURED") View.VISIBLE else View.GONE
+
+        holder.tvMeasurementStatus.text = when {
+            ap.supplicantFinalState != "NOT_MEASURED" -> "測定済み"
+            ap.bssid == measuringBssid -> "測定中"
+            else -> "未測定"
+        }
 
         if (isSelectionMode) {
             holder.checkBoxSelect.visibility = View.VISIBLE
