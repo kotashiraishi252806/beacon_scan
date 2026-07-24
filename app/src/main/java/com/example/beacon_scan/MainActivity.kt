@@ -73,9 +73,6 @@ private const val KEY_SERVER_URL = "server_url"
 private const val KEY_SEND_MODE = "send_mode"
 private const val PENDING_FILE = "pending_scans.json"
 private const val AUTO_SCAN_INTERVAL_MS = 5_000L
-private const val AUTH_TIMEOUT_MS = 8_000L
-private const val DIALOG_TIMEOUT_MS = 15_000L
-private const val DUMMY_PASSPHRASE = "DUMMY_MEAS_12345"
 
 data class AccessPoint(
     val bssid: String,
@@ -188,54 +185,63 @@ object ScanStore {
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var wifiManager: WifiManager
-    private lateinit var connectivityManager: ConnectivityManager
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var btnHelp: android.widget.ImageButton
-    private lateinit var btnScan: Button
-    private lateinit var btnSendPending: Button
-    private lateinit var btnDiscardPending: Button
-    private lateinit var btnPauseAutoScan: Button
-    private lateinit var btnToggleList: Button
-    private lateinit var btnStopMeasurement: Button
-    private lateinit var btnMeasureSelected: Button
-    private lateinit var btnSelectAll: Button
-    private lateinit var switchAutoScan: SwitchCompat
-    private lateinit var switchSendMode: SwitchCompat
-    private lateinit var etUrl: TextInputEditText
-    private lateinit var tvEmpty: TextView
-    private lateinit var tvAutoScanStatus: TextView
-    private lateinit var tvPendingCount: TextView
-    private lateinit var tvSsidCount: TextView
-    private val apList = mutableListOf<AccessPoint>()
-    private lateinit var adapter: ApAdapter
-    private var latestScanId: String? = null
-    private var isInSelectionMode = false
-    private var pendingScanId: String? = null
-    private var pendingLocation: Location? = null
-    private var pendingLabel: String? = null
+    // ── OSサービス ──────────────────────────────────────────
+    private lateinit var wifiManager: WifiManager                      // WiFiスキャン・スキャン結果取得
+    private lateinit var connectivityManager: ConnectivityManager      // requestNetwork()でAP接続依頼を出す窓口
+    private lateinit var fusedLocationClient: FusedLocationProviderClient // GPS位置情報の取得
 
-    private var latestLocation: Location? = null
+    // ── 画面部品（XMLレイアウトと1対1対応） ──────────────────
+    private lateinit var recyclerView: RecyclerView                    // AP一覧を表示するリスト
+    private lateinit var btnHelp: android.widget.ImageButton           // ヘルプダイアログを開く
+    private lateinit var btnScan: Button                               // 手動スキャン開始
+    private lateinit var btnSendPending: Button                        // 未送信データを手動送信
+    private lateinit var btnDiscardPending: Button                     // 未送信データを破棄
+    private lateinit var btnPauseAutoScan: Button                      // 自動スキャンを一時停止
+    private lateinit var btnToggleList: Button                         // AP一覧の表示/非表示切替
+    private lateinit var btnStopMeasurement: Button                    // Supplicant測定を途中停止
+    private lateinit var btnMeasureSelected: Button                    // 選択したAPのみ測定開始
+    private lateinit var btnSelectAll: Button                          // AP一覧を全選択/全解除
+    private lateinit var switchAutoScan: SwitchCompat                  // 自動スキャンのON/OFFスイッチ
+    private lateinit var switchSendMode: SwitchCompat                  // 測定後の自動送信ON/OFFスイッチ
+    private lateinit var etUrl: TextInputEditText                      // 送信先サーバURLの入力欄
+    private lateinit var tvEmpty: TextView                             // AP未検出時の「結果なし」テキスト
+    private lateinit var tvAutoScanStatus: TextView                    // 自動スキャンの状態表示（回数・経過時間）
+    private lateinit var tvPendingCount: TextView                      // 未送信データ件数の表示
+    private lateinit var tvSsidCount: TextView                         // 検出AP数または測定進捗の表示
+
+    // ── データ ───────────────────────────────────────────────
+    private val apList = mutableListOf<AccessPoint>()                  // 画面に表示中のAPリスト（RecyclerViewのデータ源）
+    private lateinit var adapter: ApAdapter                            // apListをRecyclerViewに繋ぐアダプター
+    private var latestScanId: String? = null                           // 直近のスキャンのUUID（送信データに付与）
+    private var isInSelectionMode = false                              // AP一覧が選択モード中かどうか
+    private var pendingScanId: String? = null                          // Supplicant測定待ちスキャンのUUID
+    private var pendingLocation: Location? = null                      // Supplicant測定待ちスキャンの位置情報
+    private var pendingLabel: String? = null                           // Supplicant測定待ちスキャンのラベル
+
+    // ── 位置情報 ─────────────────────────────────────────────
+    private var latestLocation: Location? = null                       // 直近取得した位置情報（スキャン時に付与）
     private val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, AUTO_SCAN_INTERVAL_MS)
         .setMinUpdateIntervalMillis(5_000L)
         .build()
-    private val locationCallback = object : LocationCallback() {
+    private val locationCallback = object : LocationCallback() {       // 位置情報が更新されるたびlatestLocationを上書き
         override fun onLocationResult(result: LocationResult) {
             latestLocation = result.lastLocation
         }
     }
 
-    private var isScanInProgress = false
-    private var scanStartMs: Long = 0L
-    private var isProcessingResults = false
-    private var isManualMeasuring = false
-    private var isProgrammaticSendModeChange = false
-    private var autoScanSessionId: String? = null
-    private var autoScanStartTime: Date? = null
-    private var isAutoScanPaused = false
-    private val autoScanHandler = Handler(Looper.getMainLooper())
-    private val autoScanRunnable = object : Runnable {
+    // ── スキャン制御フラグ ────────────────────────────────────
+    private var isScanInProgress = false                               // WiFiスキャン実行中はtrue（二重起動防止）
+    private var scanStartMs: Long = 0L                                 // スキャン開始時刻（経過時間計測用）
+    private var isProcessingResults = false                            // Supplicant測定中はtrue（スキャン結果再入防止）
+    private var isManualMeasuring = false                              // 手動選択によるSupplicant測定中はtrue
+    private var isProgrammaticSendModeChange = false                   // コード側からswitchSendModeを変更する際にリスナーの誤発火を防ぐフラグ
+
+    // ── 自動スキャン ──────────────────────────────────────────
+    private var autoScanSessionId: String? = null                      // 自動スキャン1セッション分のUUID（ON→OFFで1セッション）
+    private var autoScanStartTime: Date? = null                        // 自動スキャン開始時刻（ラベルの時刻範囲表示に使用）
+    private var isAutoScanPaused = false                               // 自動スキャンが一時停止中かどうか
+    private val autoScanHandler = Handler(Looper.getMainLooper())      // 5秒ごとのスキャン繰り返しをスケジュールするHandler
+    private val autoScanRunnable = object : Runnable {                 // 5秒ごとに自身を再登録しスキャンを繰り返すRunnable
         override fun run() {
             if (switchAutoScan.isChecked && !isScanInProgress) {
                 checkPermissionsAndScan()
@@ -245,42 +251,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val supplicantTransitions = mutableListOf<String>()
-    @Volatile private var supplicantCallback: ConnectivityManager.NetworkCallback? = null
-    @Volatile private var supplicantContinuation: kotlinx.coroutines.CancellableContinuation<Unit>? = null
-    @Volatile private var stopMeasurementRequested = false
-
-    @Suppress("DEPRECATION")
-    private val supplicantReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != WifiManager.SUPPLICANT_STATE_CHANGED_ACTION) return
-            val state = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(WifiManager.EXTRA_NEW_STATE, SupplicantState::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra<SupplicantState>(WifiManager.EXTRA_NEW_STATE)
-            } ?: return
-            val isFirst = supplicantTransitions.isEmpty()
-            supplicantTransitions.add(state.name)
-            val cont = supplicantContinuation ?: return
-            if (!cont.isActive) return
-            if (isFirst) {
-                // フェーズ1完了：最初のSupplicant状態受信＝OKが押された
-                cont.resume(Unit)
-                return
-            }
-            // フェーズ2：認証終了を検知
-            when (state) {
-                SupplicantState.COMPLETED -> cont.resume(Unit)
-                SupplicantState.DISCONNECTED -> {
-                    if (supplicantTransitions.any {
-                        it == "ASSOCIATED" || it == "FOUR_WAY_HANDSHAKE" || it == "GROUP_HANDSHAKE"
-                    }) cont.resume(Unit)
-                }
-                else -> {}
-            }
-        }
-    }
+    // ── Supplicant測定 ────────────────────────────────────────
+    private lateinit var measurer: SupplicantMeasurer                  // 接続試行・状態記録・タイムアウト管理を担うクラス
 
     private val wifiScanReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -314,6 +286,7 @@ class MainActivity : AppCompatActivity() {
         wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        measurer = SupplicantMeasurer(this, connectivityManager)
 
         recyclerView = findViewById(R.id.recyclerView)
         btnHelp = findViewById(R.id.btnHelp)
@@ -364,11 +337,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnStopMeasurement.setOnClickListener {
-            stopMeasurementRequested = true
-            supplicantContinuation?.let { if (it.isActive) it.resume(Unit) }
-            supplicantContinuation = null
-            supplicantCallback?.let { runCatching { connectivityManager.unregisterNetworkCallback(it) } }
-            supplicantCallback = null
+            measurer.requestStop()
             btnStopMeasurement.isEnabled = false
             btnStopMeasurement.text = "中断中..."
         }
@@ -419,7 +388,7 @@ class MainActivity : AppCompatActivity() {
                 .setMessage(
                     "選択した ${count} 件のAPを順番に測定します。\n\n" +
                     "各APごとにAndroidの「接続確認ダイアログ」が表示されます。\n" +
-                    "ダイアログの候補はAP1件ずつ表示されるため、合計 ${count} 回のダイアログ操作が必要です。"
+                    "ダイアログの候補はAP1件ずつ表示されるため、最大 ${count} 回のダイアログ操作が必要です。"
                 )
                 .setPositiveButton("開始") { _, _ ->
                     isInSelectionMode = false
@@ -444,7 +413,7 @@ class MainActivity : AppCompatActivity() {
                     adapter.isMeasurementColoring = true
 
                     lifecycleScope.launch {
-                        val measuredList = measureAllSupplicant(
+                        val measuredList = measurer.measureAll(
                             selectedAps,
                             onProgress = { progress, total, name ->
                                 val remaining = total - progress
@@ -469,7 +438,6 @@ class MainActivity : AppCompatActivity() {
                         )
 
                         btnStopMeasurement.visibility = View.GONE
-                        stopMeasurementRequested = false
                         adapter.measuringBssid = null
 
                         val measuredByBssid = measuredList.associateBy { it.bssid }
@@ -530,6 +498,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        switchAutoScan.isEnabled = false  // 自動スキャンは現在無効。復活時はこの行を削除する
+
         switchAutoScan.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 if (isInSelectionMode) {
@@ -573,8 +543,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         registerReceiver(wifiScanReceiver, IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION))
-        @Suppress("DEPRECATION")
-        registerReceiver(supplicantReceiver, IntentFilter(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION))
+        measurer.register()
 
         updatePendingCount()
     }
@@ -593,8 +562,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(wifiScanReceiver)
-        unregisterReceiver(supplicantReceiver)
-        supplicantCallback?.let { runCatching { connectivityManager.unregisterNetworkCallback(it) } }
+        measurer.unregister()
         autoScanHandler.removeCallbacks(autoScanRunnable)
     }
 
@@ -868,161 +836,6 @@ WiFi接続プロセスの状態遷移を記録する機能。
         }
     }
 
-    private suspend fun measureAllSupplicant(
-        apList: List<AccessPoint>,
-        onProgress: (Int, Int, String) -> Unit,
-        onApStart: (AccessPoint) -> Unit = {},
-        onApFinished: (AccessPoint) -> Unit = {}
-    ): List<AccessPoint> {
-        stopMeasurementRequested = false
-        val results = mutableListOf<AccessPoint>()
-        for ((i, ap) in apList.withIndex()) {
-            if (stopMeasurementRequested) {
-                results.add(ap.copy(supplicantFinalState = "CANCELLED", supplicantElapsedMs = 0L))
-                continue
-            }
-            onProgress(i + 1, apList.size, ap.ssids.firstOrNull() ?: ap.bssid)
-            onApStart(ap)
-            val result = measureSupplicantForAp(ap)
-            results.add(result)
-            onApFinished(result)
-            delay(300)
-        }
-        return results
-    }
-
-    @Suppress("DEPRECATION")
-    private suspend fun measureSupplicantForAp(ap: AccessPoint): AccessPoint {
-        val startMs = System.currentTimeMillis()
-        supplicantTransitions.clear()
-        supplicantContinuation = null
-
-        val specifier = buildSupplicantSpecifier(ap) ?: return ap.copy(
-            supplicantFinalState = "SKIPPED",
-            supplicantElapsedMs = 0L
-        )
-
-        val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .setNetworkSpecifier(specifier)
-            .build()
-
-        var finalState = "NOT_FOUND"
-
-        val cb = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                finalState = "COMPLETED"
-                supplicantContinuation?.let { if (it.isActive) it.resume(Unit) }
-                supplicantContinuation = null
-                supplicantCallback = null
-                runCatching { connectivityManager.unregisterNetworkCallback(this) }
-            }
-            override fun onUnavailable() {
-                supplicantContinuation?.let { if (it.isActive) it.resume(Unit) }
-                supplicantContinuation = null
-                supplicantCallback = null
-                runCatching { connectivityManager.unregisterNetworkCallback(this) }
-            }
-        }
-        // フェーズ1：OKが押されるまで待機。OSがダイアログを強制キャンセルしてonUnavailable()も
-        // 呼ばれないケースに備え30秒のタイムアウトを設定する。
-        // continuation設定後にrequestNetworkを呼ぶことでonUnavailableとのレース条件を回避
-        val phase1Completed = withTimeoutOrNull(DIALOG_TIMEOUT_MS) {
-            suspendCancellableCoroutine<Unit> { cont ->
-                supplicantContinuation = cont
-                supplicantCallback = cb
-                cont.invokeOnCancellation {
-                    supplicantContinuation = null
-                    supplicantCallback = null
-                    runCatching { connectivityManager.unregisterNetworkCallback(cb) }
-                }
-                connectivityManager.requestNetwork(request, cb)
-            }
-        }
-
-        if (phase1Completed == null) {
-            // ダイアログがOSに強制キャンセルされ、onUnavailable()も呼ばれなかった
-            supplicantContinuation = null
-            supplicantCallback = null
-            runCatching { connectivityManager.unregisterNetworkCallback(cb) }
-            return ap.copy(
-                supplicantStates = supplicantTransitions.toList(),
-                supplicantFinalState = "FAILED_AT_DIALOG_TIMEOUT",
-                supplicantElapsedMs = System.currentTimeMillis() - startMs
-            )
-        }
-
-        if (finalState == "COMPLETED" || stopMeasurementRequested) {
-            supplicantCallback = null
-            runCatching { connectivityManager.unregisterNetworkCallback(cb) }
-            return ap.copy(
-                supplicantStates = supplicantTransitions.toList(),
-                supplicantFinalState = if (stopMeasurementRequested && finalState != "COMPLETED") "CANCELLED" else finalState,
-                supplicantElapsedMs = System.currentTimeMillis() - startMs
-            )
-        }
-
-        // フェーズ2：認証（8秒）
-        withTimeoutOrNull(AUTH_TIMEOUT_MS) {
-            suspendCancellableCoroutine<Unit> { cont ->
-                supplicantContinuation = cont
-                cont.invokeOnCancellation { supplicantContinuation = null }
-            }
-        }
-
-        supplicantContinuation = null
-        supplicantCallback = null
-        runCatching { connectivityManager.unregisterNetworkCallback(cb) }
-
-        val elapsed = System.currentTimeMillis() - startMs
-        val transitions = supplicantTransitions.toList()
-
-        if (finalState != "COMPLETED") {
-            finalState = if (transitions.isNotEmpty()) {
-                val last = transitions.last()
-                if (last == "DISCONNECTED" || last == "INACTIVE" || last == "SCANNING") {
-                    "FAILED_AT_$last"
-                } else {
-                    "TIMEOUT_AT_$last"
-                }
-            } else {
-                "NOT_FOUND"
-            }
-        }
-
-        return ap.copy(
-            supplicantStates = transitions,
-            supplicantFinalState = finalState,
-            supplicantElapsedMs = elapsed
-        )
-    }
-
-    private fun buildSupplicantSpecifier(ap: AccessPoint): WifiNetworkSpecifier? {
-        val mac = runCatching { MacAddress.fromString(ap.bssid) }.getOrNull() ?: return null
-        val ssid = ap.ssids.firstOrNull()
-        val builder = WifiNetworkSpecifier.Builder().setBssid(mac)
-        if (ssid != null) builder.setSsid(ssid)
-        val caps = ap.capabilitiesRaw
-        when {
-            ap.security == "WEP" -> return null
-            caps.contains("EAP") && !caps.contains("OWE") -> {
-                val eapConfig = WifiEnterpriseConfig().apply {
-                    eapMethod = WifiEnterpriseConfig.Eap.PEAP
-                    phase2Method = WifiEnterpriseConfig.Phase2.MSCHAPV2
-                    identity = "DUMMY_USER"
-                    password = DUMMY_PASSPHRASE
-                }
-                builder.setWpa2EnterpriseConfig(eapConfig)
-            }
-            caps.contains("OWE") -> builder.setIsEnhancedOpen(true)
-            ap.security == "WPA3" || ap.security == "WPA2/WPA3" ->
-                builder.setWpa3Passphrase(DUMMY_PASSPHRASE)
-            ap.security == "WPA2" || ap.security == "WPA" ->
-                builder.setWpa2Passphrase(DUMMY_PASSPHRASE)
-        }
-        return runCatching { builder.build() }.getOrNull()
-    }
-
     @Suppress("DEPRECATION")
     private fun groupByBssid(results: List<ScanResult>): List<AccessPoint> {
         val grouped = mutableMapOf<String, MutableList<ScanResult>>()
@@ -1151,13 +964,12 @@ WiFi接続プロセスの状態遷移を記録する機能。
 
             val snapshotList = apList.toList()
             lifecycleScope.launch {
-                val measuredList = measureAllSupplicant(snapshotList, onProgress = { progress, total, name ->
+                val measuredList = measurer.measureAll(snapshotList, onProgress = { progress, total, name ->
                     val remaining = total - progress
                     tvSsidCount.text = "今回検出: ${total}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
                 })
 
                 btnStopMeasurement.visibility = View.GONE
-                stopMeasurementRequested = false
 
                 apList.clear()
                 apList.addAll(measuredList)

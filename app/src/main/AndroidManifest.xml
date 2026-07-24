@@ -23,9 +23,6 @@
         android:theme="@style/Theme.Beacon_scan"
         android:usesCleartextTraffic="true">
         <activity
-            android:name=".SupplicantScanActivity"
-            android:exported="false" />
-        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden">
