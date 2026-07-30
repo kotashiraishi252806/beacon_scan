@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>beacon_scan — アプリ概要図</title>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default' });
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Hiragino Sans', 'Meiryo', 'Segoe UI', sans-serif;
+      background: #e8edf4;
+      padding: 40px 20px 60px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    h1 { font-size: 20px; color: #223; margin-bottom: 16px; }
+    .diagram {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.1);
+      border: 1px solid #dde;
+      padding: 32px 40px;
+    }
+    .legend {
+      margin-top: 16px;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #dde;
+      padding: 12px 22px;
+      font-size: 11px; color: #445;
+      display: flex; gap: 24px; align-items: center; flex-wrap: wrap;
+    }
+    .legend strong { font-size: 11px; color: #334; }
+    .legend-item { display: flex; align-items: center; gap: 7px; }
+  </style>
+</head>
+<body>
+
+<h1>beacon_scan — アプリ概要図</h1>
+
+<div class="diagram">
+  <pre class="mermaid">
+%%{init: {'themeVariables': {'noteBkgColor': '#ddeeff', 'noteBorderColor': '#99bbdd', 'noteTextColor': '#223344'}}}%%
+sequenceDiagram
+    participant U as ユーザ
+    participant S as スマートフォン
+    participant AP as AP（無線LAN機器）
+    participant SV as 分析サーバ
+
+    rect rgb(238, 243, 251)
+        Note over U,SV: ① WiFiスキャン — 周辺の AP を探す
+        U->>S: 「スキャン」ボタンをタップ
+        S-->>AP: スキャン電波を送信
+        AP-->>S: 存在を返答
+        S->>U: AP 一覧を画面に表示
+    end
+
+    rect rgb(238, 243, 251)
+        Note over U,SV: ② 測定する AP を選んで開始
+        U->>S: AP を選んで「測定開始」をタップ
+    end
+
+    rect rgb(238, 243, 251)
+        Note over U,SV: ③ 接続試行・状態記録（選んだ AP に 1 台ずつ繰り返す）
+        loop AP ごとに繰り返す
+            S-->>AP: 接続を試みる
+            AP-->>S: 応答
+            S-->>S: 接続がどこまで進んだかを記録
+        end
+        Note right of S: 記録例（成功）：切断中→認証中→接続確立
+        Note right of S: 記録例（失敗）：切断中→認証中→認証失敗
+        Note right of S: APの種類（Open・WPA2・WPA3）で異なる
+    end
+
+    rect rgb(238, 243, 251)
+        Note over U,SV: ④ 測定結果をサーバへ送信
+        S-->>SV: 全 AP の測定データを送信
+    end
+  </pre>
+</div>
+
+<div class="legend">
+  <strong>凡例</strong>
+  <div class="legend-item">
+    <svg width="52" height="14">
+      <line x1="2" y1="7" x2="40" y2="7" stroke="#333" stroke-width="2"/>
+      <polygon points="40,3 52,7 40,11" fill="#333"/>
+    </svg>
+    実線：ユーザが直接体験できること（ボタン操作・画面表示）
+  </div>
+  <div class="legend-item">
+    <svg width="52" height="14">
+      <line x1="2" y1="7" x2="40" y2="7" stroke="#888" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <polygon points="40,3 52,7 40,11" fill="#888"/>
+    </svg>
+    破線：目に見えない処理（通信・電波・内部記録）
+  </div>
+</div>
+
+</body>
+</html>

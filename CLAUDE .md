@@ -24,7 +24,7 @@ Single-Activity Android app (Kotlin, minSdk 30, targetSdk 36). No fragments, no 
 ### Key Files
 
 - **`MainActivity.kt`** — All logic lives here. Contains `ScanStore` (persistence), `AccessPoint` (data model), `ApAdapter` (RecyclerView), and `MainActivity` itself.
-- **`SupplicantScanActivity.kt`** — Legacy standalone Supplicant measurement screen. No longer launched from MainActivity (superseded by integrated measurement). Still registered in AndroidManifest.
+- **`SupplicantMeasurer.kt`** — Supplicant measurement class. Handles sequential per-AP connection attempts, state recording, and timeout management. Extracted from MainActivity.
 - **`activity_main.xml`** — ConstraintLayout. All scan/send UI on a single screen.
 
 ### Data Flow
@@ -33,7 +33,7 @@ Single-Activity Android app (Kotlin, minSdk 30, targetSdk 36). No fragments, no 
 WifiManager.startScan()
     → SCAN_RESULTS_AVAILABLE_ACTION broadcast
     → onScanResultsReady()
-    → measureAllSupplicant()        ← sequential per-AP connection attempts
+    → measurer.measureAll()          ← sequential per-AP connection attempts (SupplicantMeasurer)
     → saveToPending()               ← appends to pending_scans.json
     → trySendAllPending()           ← HTTP POST to configurable server URL
 ```
@@ -48,8 +48,7 @@ After each WiFi scan, the app sequentially attempts to connect to each detected 
 
 - **ダイアログ表示はAndroid OS側が制御する。必ずしも表示されるとは限らない。** アプリはrequestNetwork()を呼ぶだけであり、その後のUI表示・接続処理はOS任せ。
 - `SUPPLICANT_STATE_CHANGED_ACTION` BroadcastReceiver captures state transitions
-- Phase 1 (`DIALOG_TIMEOUT_MS` = 15s): **「OSが動き出したか」の確認。** BroadcastReceiverにSupplicantStateが届くかonUnavailable()が呼ばれれば完了。15秒どちらも来なければ → `FAILED_AT_DIALOG_TIMEOUT`
-- Phase 2 (`AUTH_TIMEOUT_MS` = 8s): **「接続試行の結果」の確認。** COMPLETED / DISCONNECTED等の終端状態で完了。8秒来なければ → `TIMEOUT_AT_<STATE>`
+- Single phase (`DIALOG_TIMEOUT_MS` = 15s): `withTimeoutOrNull` で最大15秒待機。`onAvailable` / `onUnavailable` / 終端SupplicantState（COMPLETED・DISCONNECTED＋鍵交換済み）のいずれかで早期終了。15秒何も来なければ → `FAILED_AT_DIALOG_TIMEOUT`
 - `supplicantContinuation` (volatile field) connects the BroadcastReceiver to the suspended coroutine
 - **Critical**: `requestNetwork()` must be called INSIDE `suspendCancellableCoroutine` block, after setting `supplicantContinuation`, to avoid race condition where `onUnavailable()` fires before the continuation is registered
 - WEP APs are skipped (`SKIPPED`). EAP APs are attempted with dummy credentials.
@@ -58,7 +57,7 @@ After each WiFi scan, the app sequentially attempts to connect to each detected 
 
 ### Security Classification (`getSecurity()`)
 
-Parses `ScanResult.capabilities` raw string. Priority order matters — `WPA2+SAE` → `WPA2/WPA3`, then SAE/OWE/EAP_SUITE_B → `WPA3`, then WPA2, WPA, WEP, Open. See `security_classification_notes.md` for the full decision rationale and edge cases.
+Parses `ScanResult.capabilities` raw string. Priority order matters — `WPA2+SAE` → `WPA2/WPA3`, then SAE/OWE/EAP_SUITE_B → `WPA3`, then WPA2, WPA, WEP, Open. See `md/セキュリティ、無線LAN規格/security_classification_notes.md` for the full decision rationale and edge cases.
 
 ### Sent JSON Schema
 
