@@ -42,11 +42,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -219,15 +217,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingLabel: String? = null                           // Supplicant測定待ちスキャンのラベル
 
     // ── 位置情報 ─────────────────────────────────────────────
-    private var latestLocation: Location? = null                       // 直近取得した位置情報（スキャン時に付与）
-    private val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, AUTO_SCAN_INTERVAL_MS)
-        .setMinUpdateIntervalMillis(5_000L)
-        .build()
-    private val locationCallback = object : LocationCallback() {       // 位置情報が更新されるたびlatestLocationを上書き
-        override fun onLocationResult(result: LocationResult) {
-            latestLocation = result.lastLocation
-        }
-    }
+    private var latestLocation: Location? = null                       // スキャン時点に取得した位置情報
 
     // ── スキャン制御フラグ ────────────────────────────────────
     private var isScanInProgress = false                               // WiFiスキャン実行中はtrue（二重起動防止）
@@ -264,7 +254,6 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
-            startLocationUpdates()
             startScan()
         } else {
             isScanInProgress = false
@@ -550,13 +539,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        startLocationUpdates()
         updatePendingCount()
     }
 
     override fun onPause() {
         super.onPause()
-        fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
     override fun onDestroy() {
@@ -564,15 +551,6 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(wifiScanReceiver)
         measurer.unregister()
         autoScanHandler.removeCallbacks(autoScanRunnable)
-    }
-
-    private fun startLocationUpdates() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) return
-        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
-        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            if (location != null && latestLocation == null) latestLocation = location
-        }
     }
 
     private fun showHelpDialog() {
@@ -897,13 +875,19 @@ WiFi接続プロセスの状態遷移を記録する機能。
         isScanInProgress = true
         scanStartMs = System.currentTimeMillis()
         btnScan.isEnabled = false
-        @Suppress("DEPRECATION")
-        val started = wifiManager.startScan()
-        if (!started) {
-            isScanInProgress = false
-            btnScan.isEnabled = !switchAutoScan.isChecked
-            Toast.makeText(this, "スキャンがスロットリングされています。しばらく待ってから再試行してください", Toast.LENGTH_SHORT).show()
-        }
+
+        val cts = CancellationTokenSource()
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+            .addOnCompleteListener { task ->
+                latestLocation = task.result
+                @Suppress("DEPRECATION")
+                val started = wifiManager.startScan()
+                if (!started) {
+                    isScanInProgress = false
+                    btnScan.isEnabled = !switchAutoScan.isChecked
+                    Toast.makeText(this, "スキャンがスロットリングされています。しばらく待ってから再試行してください", Toast.LENGTH_SHORT).show()
+                }
+            }
     }
 
     private fun onScanResultsReady() {

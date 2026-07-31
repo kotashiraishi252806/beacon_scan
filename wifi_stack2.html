@@ -52,9 +52,10 @@ sequenceDiagram
     rect rgb(238, 243, 251)
         Note over U,SV: ① WiFiスキャン — 周辺の AP を探す
         U->>S: 「スキャン」ボタンをタップ
-        S-->>AP: スキャン電波を送信
-        AP-->>S: 存在を返答
-        S->>U: AP 一覧を画面に表示
+        S-->>S: 位置情報を取得（getCurrentLocation / GPS優先）
+        S-->>AP: Probe Request(broadcast)<br/>宛先MACアドレス(FF:FF:FF:FF:FF:FF)
+        AP-->>S: Probe Response
+        S->>S: AP 一覧を画面に表示
     end
 
     rect rgb(238, 243, 251)
