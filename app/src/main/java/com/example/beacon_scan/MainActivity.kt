@@ -14,7 +14,9 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.wifi.ScanResult
 import android.net.wifi.SupplicantState
+import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiEnterpriseConfig
+import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
@@ -32,6 +34,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -85,6 +88,7 @@ data class AccessPoint(
     val wifiStandardCode: Int,
     val security: String,
     val capabilitiesRaw: String,
+    val securityTypesRaw: List<Int> = emptyList(), // API33+のみ非空。JSON送信には含めない
     val supplicantStates: List<String> = emptyList(),
     val supplicantFinalState: String = "NOT_MEASURED",
     val supplicantElapsedMs: Long = -1L
@@ -799,7 +803,7 @@ WiFi接続プロセスの状態遷移を記録する機能。
         else -> "Unknown"
     }
 
-    private fun getSecurity(capabilities: String): String {
+    private fun getSecurityFromCapabilities(capabilities: String): String {
         val hasWPA2 = capabilities.contains("WPA2")
         val hasSAE  = capabilities.contains("SAE")
         return when {
@@ -813,6 +817,37 @@ WiFi接続プロセスの状態遷移を記録する機能。
             else                                                       -> "Open"
         }
     }
+
+    // SECURITY_TYPE_PSK はWPA1/WPA2を区別しないため、PSK確定後の二値判定のみ補助的に使う（5.2節参照）
+    private fun disambiguateWpaVersion(capabilities: String): String =
+        if (capabilities.contains("WPA2") || capabilities.contains("RSN")) "WPA2" else "WPA"
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun getSecurityFromTypes(result: ScanResult): String {
+        val types = result.securityTypes.toSet()
+        val hasPsk       = WifiConfiguration.SECURITY_TYPE_PSK in types
+        val hasEap       = WifiConfiguration.SECURITY_TYPE_EAP in types
+        val hasSae       = WifiConfiguration.SECURITY_TYPE_SAE in types
+        val hasOwe       = WifiConfiguration.SECURITY_TYPE_OWE in types
+        val hasWpa3Ent   = WifiConfiguration.SECURITY_TYPE_EAP_WPA3_ENTERPRISE in types
+            || WifiConfiguration.SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT in types
+        val hasPasspoint = WifiInfo.SECURITY_TYPE_PASSPOINT_R1_R2 in types
+            || WifiInfo.SECURITY_TYPE_PASSPOINT_R3 in types
+        val hasWep       = WifiConfiguration.SECURITY_TYPE_WEP in types
+
+        return when {
+            hasPsk && hasSae               -> "WPA2/WPA3"
+            hasSae || hasOwe || hasWpa3Ent -> "WPA3"
+            hasPsk                         -> disambiguateWpaVersion(result.capabilities)
+            hasEap || hasPasspoint         -> "WPA2"
+            hasWep                         -> "WEP"
+            else                           -> "Open"
+        }
+    }
+
+    private fun getSecurity(result: ScanResult): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) getSecurityFromTypes(result)
+        else getSecurityFromCapabilities(result.capabilities)
 
     @Suppress("DEPRECATION")
     private fun groupByBssid(results: List<ScanResult>): List<AccessPoint> {
@@ -836,6 +871,9 @@ WiFi接続プロセスの状態遷移を記録する機能。
             val mldMac = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 representative.apMldMacAddress?.toString()
             } else null
+            val securityTypesRaw = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                representative.securityTypes.toList()
+            } else emptyList()
             AccessPoint(
                 bssid = bssid,
                 mldMacAddress = mldMac,
@@ -847,8 +885,9 @@ WiFi接続プロセスの状態遷移を記録する機能。
                 channelWidthMhz = channelWidthMhz,
                 wifiStandard = getWifiStandardLabel(wifiStandardCode),
                 wifiStandardCode = wifiStandardCode,
-                security = getSecurity(representative.capabilities),
-                capabilitiesRaw = representative.capabilities
+                security = getSecurity(representative),
+                capabilitiesRaw = representative.capabilities,
+                securityTypesRaw = securityTypesRaw
             )
         }.sortedByDescending { it.rssiDbm }
     }

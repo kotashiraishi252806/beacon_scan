@@ -9,7 +9,9 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.MacAddress
+import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiEnterpriseConfig
+import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.net.wifi.SupplicantState
@@ -212,19 +214,43 @@ class SupplicantMeasurer(
         val ssid = ap.ssids.firstOrNull()
         val builder = WifiNetworkSpecifier.Builder().setBssid(mac)
         if (ssid != null) builder.setSsid(ssid)
-        val caps = ap.capabilitiesRaw
+
+        if (ap.security == "WEP") return null
+
+        val types = ap.securityTypesRaw.toSet()
+        val structured = types.isNotEmpty() // API33+実機のみtrue
+
+        val isOwe = if (structured) WifiConfiguration.SECURITY_TYPE_OWE in types
+                    else ap.capabilitiesRaw.contains("OWE")
+
+        val isPasspoint = structured &&
+            (WifiInfo.SECURITY_TYPE_PASSPOINT_R1_R2 in types || WifiInfo.SECURITY_TYPE_PASSPOINT_R3 in types)
+
+        val isWpa3Ent192 = structured && WifiConfiguration.SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT in types
+        val isWpa3EntStd = structured && WifiConfiguration.SECURITY_TYPE_EAP_WPA3_ENTERPRISE in types
+
+        val isEap = if (structured) {
+            WifiConfiguration.SECURITY_TYPE_EAP in types || isWpa3Ent192 || isWpa3EntStd || isPasspoint
+        } else {
+            ap.capabilitiesRaw.contains("EAP") && !ap.capabilitiesRaw.contains("OWE")
+        }
+
+        fun dummyEapConfig() = WifiEnterpriseConfig().apply {
+            eapMethod = WifiEnterpriseConfig.Eap.PEAP
+            phase2Method = WifiEnterpriseConfig.Phase2.MSCHAPV2
+            identity = "DUMMY_USER"
+            password = DUMMY_PASSPHRASE
+        }
+
         when {
-            ap.security == "WEP" -> return null
-            caps.contains("EAP") && !caps.contains("OWE") -> {
-                val eapConfig = WifiEnterpriseConfig().apply {
-                    eapMethod = WifiEnterpriseConfig.Eap.PEAP
-                    phase2Method = WifiEnterpriseConfig.Phase2.MSCHAPV2
-                    identity = "DUMMY_USER"
-                    password = DUMMY_PASSPHRASE
-                }
-                builder.setWpa2EnterpriseConfig(eapConfig)
+            // API31以上要求のメソッドだが、structured=trueは実質API33以上でのみ成立するため安全（4.4節）
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && (isWpa3Ent192 || isWpa3EntStd) -> {
+                val eapConfig = dummyEapConfig()
+                if (isWpa3Ent192) builder.setWpa3Enterprise192BitModeConfig(eapConfig)
+                else builder.setWpa3EnterpriseStandardModeConfig(eapConfig)
             }
-            caps.contains("OWE") -> builder.setIsEnhancedOpen(true)
+            isEap -> builder.setWpa2EnterpriseConfig(dummyEapConfig())
+            isOwe -> builder.setIsEnhancedOpen(true)
             ap.security == "WPA3" || ap.security == "WPA2/WPA3" ->
                 builder.setWpa3Passphrase(DUMMY_PASSPHRASE)
             ap.security == "WPA2" || ap.security == "WPA" ->

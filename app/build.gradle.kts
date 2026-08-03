@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.beacon_scan"
+        applicationId = "com.example.beacon_scan_v6"
         minSdk = 30
         targetSdk = 36
         versionCode = 1
