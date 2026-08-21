@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.beacon_scan_v6"
+        applicationId = "com.example.beacon_scan"
         minSdk = 30
         targetSdk = 36
         versionCode = 1
@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
+    implementation("com.google.code.gson:gson:2.10.1")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

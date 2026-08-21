@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">beacon_scan</string>
+
+    <string-array name="throughput_file_download_urls">
+        <item>https://wifimap.matsuda-lab.jp/DownloadFiles/5Mtest</item>
+        <item>https://wlv.matsuda-lab.jp/DownloadFiles/5Mtest.bin</item>
+        <item>http://wlv.matsuda-lab.jp/DownloadFiles/10Mtest</item>
+        <item>自分で入力</item>
+    </string-array>
+
+    <string-array name="throughput_server_urls">
+        <item>http://192.168.11.119:8081/test_receive.php</item>
+        <item>http://10.40.21.231:8081/test_receive.php</item>
+        <item>http://wlv.matsuda-lab.jp/test_receive.php</item>
+        <item>http://192.168.11.56:8081/test_receive.php</item>
+        <item>自分で入力</item>
+    </string-array>
 </resources>
