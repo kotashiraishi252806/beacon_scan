@@ -44,6 +44,11 @@
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <activity
+            android:name=".SsidMeasurementActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
             android:name=".ConnectionMeasurementActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
