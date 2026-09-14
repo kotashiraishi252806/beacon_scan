@@ -109,6 +109,7 @@ class SsidMeasurementActivity : AppCompatActivity() {
     // ── セッション管理 ───────────────────────────────────────
     private var sessionId: String? = null
     private var sessionStartTime: Date? = null
+    private var selectedSsids: Set<String> = emptySet()
 
     // ── 自動スキャン ──────────────────────────────────────────
     private var autoScanSessionId: String? = null
@@ -265,6 +266,7 @@ class SsidMeasurementActivity : AppCompatActivity() {
             if (sessionId == null) {
                 sessionId = UUID.randomUUID().toString()
                 sessionStartTime = Date()
+                btnScan.isEnabled = false
             }
             isInSelectionMode = false
             adapter.isSelectionMode = false
@@ -284,6 +286,7 @@ class SsidMeasurementActivity : AppCompatActivity() {
             val startTime = sessionStartTime ?: return@setOnClickListener
             sessionId = null
             sessionStartTime = null
+            selectedSsids = emptySet()
             hideScanResultsView()
             btnScan.isEnabled = true
             tvEmpty.visibility = View.VISIBLE
@@ -608,6 +611,7 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
             adapter.notifyDataSetChanged()
 
             val targetedSsids = targetAps.mapNotNull { it.ssids.firstOrNull() }.distinct()
+            selectedSsids = targetedSsids.toSet()
             withContext(Dispatchers.IO) {
                 saveToPending(measuredList, location, scanId, sid, targetedSsids, allScannedAps)
             }
@@ -789,7 +793,36 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
                 }
             }
         } else {
-            // 手動スキャン：SSID選択モードに移行
+            // セッション2回目以降：前回選択SSIDで自動接続施行
+            if (sessionId != null && selectedSsids.isNotEmpty()) {
+                val targetAps = apList.filter { (it.ssids.firstOrNull() ?: "") in selectedSsids }
+                isScanInProgress = false
+                isProcessingResults = false
+                if (targetAps.isNotEmpty()) {
+                    startMeasurementCycle(targetAps, location, scanId, apList.toList())
+                } else {
+                    val sid = sessionId!!
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.IO) {
+                            saveToPending(emptyList(), location, scanId, sid, selectedSsids.toList())
+                        }
+                        updatePendingCount()
+                        if (switchSendMode.isChecked) trySendAllPending()
+                    }
+                    tvSsidCount.text = "選択済みSSIDが検出されませんでした\n次の測定場所に移動してください"
+                    tvSsidCount.visibility = View.VISIBLE
+                    layoutMoveButtons.visibility = View.VISIBLE
+                    tvEmpty.visibility = View.GONE
+                    AlertDialog.Builder(this)
+                        .setTitle("選択済みSSIDが検出されませんでした")
+                        .setMessage("対象SSID: ${selectedSsids.joinToString(", ")}")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+                return
+            }
+
+            // 手動スキャン初回：SSID選択モードに移行
             pendingScanId = scanId
             pendingLocation = location
             pendingLabel = label

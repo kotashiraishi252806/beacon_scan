@@ -16,12 +16,15 @@ import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.net.wifi.SupplicantState
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
-private const val DIALOG_TIMEOUT_MS = 15_000L
+private const val DIALOG_TIMEOUT_MS = 10_000L
+private const val NO_ACTIVITY_TIMEOUT_MS = 3_000L
 private const val DUMMY_PASSPHRASE = "DUMMY_MEAS_12345"
 
 /**
@@ -175,7 +178,7 @@ class SupplicantMeasurer(
                     supplicantCallback = null
                     runCatching { connectivityManager.unregisterNetworkCallback(cb) }
                 }
-                connectivityManager.requestNetwork(request, cb)
+                connectivityManager.requestNetwork(request, cb, Handler(Looper.getMainLooper()), NO_ACTIVITY_TIMEOUT_MS.toInt())
             }
         }
 
