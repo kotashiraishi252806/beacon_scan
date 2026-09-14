@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>無線LAN測定アプリの仕組み</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Hiragino Sans', 'Meiryo', 'Segoe UI', sans-serif;
+      background: #e8ecf2;
+      overflow: hidden;
+    }
+
+    #deck { width: 100vw; height: 100vh; position: relative; }
+
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      padding: 52px 80px 58px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease;
+      background: #f7f9fc;
+      color: #1a1e2e;
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide.cover   { background: #0d1f45; color: #eef2ff; }
+    .slide.section { background: #10294f; color: #eef2ff; }
+
+    .label {
+      font-size: 12px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: #1d57b0; margin-bottom: 10px;
+    }
+    .cover .label  { color: #7eb8ff; }
+    .section .label { color: #7eb8ff; }
+
+    h2 {
+      font-size: 34px; font-weight: 900; color: #0d1f45;
+      line-height: 1.25; margin-bottom: 10px;
+    }
+    .cover h2   { color: #eef2ff; font-size: 40px; }
+    .section h2 { color: #eef2ff; font-size: 36px; }
+
+    .lead {
+      font-size: 16px; color: #445; line-height: 1.75;
+      margin-bottom: 28px; max-width: 800px;
+    }
+    .cover .lead   { color: rgba(255,255,255,0.72); }
+    .section .lead { color: rgba(255,255,255,0.65); }
+
+    .rule { border: none; border-top: 2px solid #dde3ee; margin: 0 0 24px; }
+
+    /* カード */
+    .card {
+      background: white; border: 1px solid #dde3ee;
+      border-radius: 10px; padding: 18px 22px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 12px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: #1d57b0; margin-bottom: 6px;
+    }
+    .card-body { font-size: 15px; color: #223; line-height: 1.75; }
+
+    /* ハイライトボックス */
+    .hbox {
+      border-left: 5px solid #1d57b0;
+      background: #eef4ff; border-radius: 0 8px 8px 0;
+      padding: 14px 18px; margin-bottom: 14px;
+      font-size: 15px; color: #1a2040; line-height: 1.75;
+    }
+    .hbox.green  { border-color: #237038; background: #eef7f0; color: #1a3020; }
+    .hbox.orange { border-color: #b86020; background: #fdf3ea; color: #3a1a00; }
+    .hbox.red    { border-color: #b03030; background: #fdf0f0; color: #3a0a0a; }
+    .hbox.gray   { border-color: #889; background: #f2f3f6; color: #334; }
+    .hbox.teal   { border-color: #0e808e; background: #eaf6f7; color: #0a3035; }
+
+    /* テーブル */
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th {
+      background: #1d57b0; color: white;
+      padding: 10px 16px; text-align: left;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    }
+    td {
+      padding: 10px 16px; color: #223;
+      border-bottom: 1px solid #e4e8f0; vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #fafbfd; }
+
+    /* バッジ */
+    .badge {
+      display: inline-block; padding: 3px 12px;
+      border-radius: 20px; font-size: 12px; font-weight: 700;
+    }
+    .b-blue   { background: #1d57b0; color: white; }
+    .b-teal   { background: #0e808e; color: white; }
+    .b-green  { background: #237038; color: white; }
+    .b-red    { background: #b03030; color: white; }
+    .b-orange { background: #b86020; color: white; }
+    .b-gray   { background: #667; color: white; }
+    .b-purple { background: #553366; color: white; }
+
+    /* 最終状態ラベル */
+    .fs {
+      font-family: 'Courier New', monospace; font-size: 12px;
+      padding: 3px 8px; border-radius: 4px; font-weight: 700;
+    }
+    .fs-ok     { background: #d4edda; color: #155724; }
+    .fs-skip   { background: #e2e3f3; color: #383888; }
+    .fs-none   { background: #e9ecef; color: #495057; }
+    .fs-fail   { background: #f8d7da; color: #721c24; }
+    .fs-tout   { background: #fff3cd; color: #856404; }
+    .fs-cancel { background: #ede0f5; color: #553366; }
+
+    /* インラインコード */
+    code {
+      font-family: 'Courier New', monospace; font-size: 12px;
+      background: #eef; color: #1d57b0;
+      padding: 1px 6px; border-radius: 4px;
+    }
+
+    /* 矢印フロー */
+    .flow {
+      display: flex; align-items: center; gap: 0;
+      margin: 16px 0;
+    }
+    .flow-step {
+      flex: 1; text-align: center;
+      background: white; border: 2px solid #1d57b0;
+      border-radius: 8px; padding: 12px 8px;
+      font-size: 14px; font-weight: 700; color: #0d1f45; line-height: 1.4;
+    }
+    .flow-arrow {
+      font-size: 22px; color: #1d57b0; padding: 0 6px; flex-shrink: 0;
+    }
+    .flow-step.active-step {
+      background: #1d57b0; color: white; border-color: #1d57b0;
+    }
+
+    /* 2カラム */
+    .cols { display: flex; gap: 20px; }
+    .cols > * { flex: 1; }
+
+    /* ナビゲーション */
+    #nav {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 16px;
+      background: rgba(13,31,69,0.85); backdrop-filter: blur(8px);
+      border-radius: 40px; padding: 10px 22px;
+    }
+    #nav button {
+      background: none; border: 1px solid rgba(255,255,255,0.35);
+      color: white; padding: 6px 18px; border-radius: 20px;
+      cursor: pointer; font-size: 13px; transition: all 0.2s;
+    }
+    #nav button:hover { background: rgba(255,255,255,0.15); }
+    #nav button:disabled { opacity: 0.25; cursor: default; }
+    #slide-counter { font-size: 12px; color: rgba(255,255,255,0.65); min-width: 54px; text-align: center; }
+
+    #progress {
+      position: fixed; top: 0; left: 0; height: 4px;
+      background: linear-gradient(90deg, #1d57b0, #4a9eff);
+      transition: width 0.3s ease; z-index: 100;
+    }
+    #hint {
+      position: fixed; top: 14px; right: 18px;
+      font-size: 11px; color: #aab; letter-spacing: 0.5px;
+    }
+
+    .flex1 { flex: 1; }
+    .mt8  { margin-top:  8px; }
+    .mt12 { margin-top: 12px; }
+    .mt16 { margin-top: 16px; }
+    .mt20 { margin-top: 20px; }
+
+    /* 番号付きリスト風 */
+    .num-list { list-style: none; }
+    .num-list li {
+      display: flex; gap: 14px; align-items: flex-start;
+      margin-bottom: 12px; font-size: 15px; color: #223; line-height: 1.7;
+    }
+    .num-list li .num {
+      flex-shrink: 0; width: 26px; height: 26px;
+      border-radius: 50%; background: #1d57b0; color: white;
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="hint">← → でスライド移動</div>
+<div id="deck">
+
+<!-- ══════════════════════════
+     S1 タイトル
+══════════════════════════ -->
+<div class="slide cover active">
+  <div style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+    <div class="label">Research Application</div>
+    <h2>屋外無線LAN環境の<br>測定アプリ</h2>
+    <p class="lead">
+      スマートフォンで周辺の無線LANアクセスポイントをスキャンし、<br>
+      セキュリティ方式の判定・接続試行・状態記録をへて<br>
+      測定データをサーバーへ送信する研究用アプリの仕組みを解説する。
+    </p>
+    <div style="font-size:13px; color:rgba(255,255,255,0.4); line-height:2.2;">
+      実装言語：Kotlin　対象 OS：Android（API 30 以上）<br>
+      動作確認端末：Motorola moto g31(w) 他
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S2 研究背景
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">背景</div>
+  <h2>なぜこのアプリが必要なのか</h2>
+  <p class="lead">無線LAN（WiFi）は観光地・避難所・公共施設など屋外でも広く整備されているが、<br>「どこにどんな WiFi があるか」を体系的に把握する手段が少ない。</p>
+  <hr class="rule">
+
+  <div class="cols">
+    <div>
+      <div class="hbox orange">
+        <strong>課題</strong><br>
+        既存の無線LAN測定ツールは屋内を前提にしたものが多く、
+        屋外を含む広範囲の調査には適していない。
+        有線と異なり電波は目に見えないため、利用環境の把握が難しい。
+      </div>
+      <div class="hbox green mt12">
+        <strong>解決策</strong><br>
+        多くの人が持ち歩くスマートフォンを測定端末として使う。
+        屋外でも利用でき、将来的には多数のユーザーが参加する
+        大規模調査（クラウドソーシング測定）への展開も視野に入れる。
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">このアプリが測定するもの</div>
+        <div class="card-body" style="line-height:2;">
+          ・周辺にある WiFi アクセスポイント（AP）の一覧<br>
+          ・各 AP の電波強度・周波数帯・WiFi 世代<br>
+          ・セキュリティ方式（Open / WPA2 / WPA3 など）<br>
+          ・接続試行中の WiFi 内部状態の遷移<br>
+          ・測定時刻・GPS 位置情報
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S3 測定の全体フロー
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">全体像</div>
+  <h2>測定から送信までの 4 ステップ</h2>
+  <p class="lead">アプリは「スキャン → 分類 → 接続試行 → 送信」の流れで動作する。</p>
+  <hr class="rule">
+
+  <div class="flow">
+    <div class="flow-step">① WiFi<br>スキャン</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">② セキュリティ<br>方式の判定</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">③ AP への<br>接続試行</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">④ データ<br>送信</div>
+  </div>
+
+  <div class="mt12">
+    <div class="hbox" style="font-size:14px;">
+      <strong>① WiFi スキャン：</strong>
+      端末の WiFi 機能を使って周辺の AP を検出。
+      電波強度・周波数・WiFi 世代・セキュリティ情報を取得する。
+    </div>
+    <div class="hbox teal" style="font-size:14px;">
+      <strong>② セキュリティ方式の判定：</strong>
+      各 AP がどのセキュリティ方式を使っているかを OS の情報から判定し、
+      6 つのカテゴリに分類する。接続試行の方法を決めるために必要。
+    </div>
+    <div class="hbox green" style="font-size:14px;">
+      <strong>③ AP への接続試行（Supplicant 測定）：</strong>
+      各 AP にダミーの認証情報で接続を試み、WiFi 接続プロセスの
+      内部状態がどのように変化するかを記録する。
+    </div>
+    <div class="hbox gray" style="font-size:14px;">
+      <strong>④ データ送信：</strong>
+      収集したデータを JSON 形式でサーバーへ送信する。
+      送信できない場合は端末内に保存し、次回以降に再送する。
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S4 WiFiセキュリティ方式とは
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">基礎知識</div>
+  <h2>WiFi のセキュリティ方式とは</h2>
+  <p class="lead">WiFi には「通信を暗号化して盗聴を防ぐ」仕組みがあり、その方式によって安全性が異なる。</p>
+  <hr class="rule">
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:18%;">方式</th>
+        <th style="width:22%;">年代</th>
+        <th>特徴</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge b-green">Open</span></td>
+        <td style="font-size:13px; color:#556;">—</td>
+        <td style="font-size:13px;">暗号化なし。誰でも接続できる（カフェの無料WiFi等）</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-red">WEP</span></td>
+        <td style="font-size:13px; color:#556;">1999年〜</td>
+        <td style="font-size:13px;">初期の暗号化方式。現在は解読が容易で非推奨</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-blue" style="background:#3a6abf;">WPA</span></td>
+        <td style="font-size:13px; color:#556;">2003年〜</td>
+        <td style="font-size:13px;">WEP の脆弱性を改良。現在はほぼ見られない</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-blue" style="background:#2a5aa8;">WPA2</span></td>
+        <td style="font-size:13px; color:#556;">2004年〜</td>
+        <td style="font-size:13px;">現在最も普及している方式。家庭・企業で広く使用</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-blue">WPA3</span></td>
+        <td style="font-size:13px; color:#556;">2018年〜</td>
+        <td style="font-size:13px;">最新の方式。より強固な認証と暗号化を実現</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-teal">WPA2/WPA3</span></td>
+        <td style="font-size:13px; color:#556;">移行期</td>
+        <td style="font-size:13px;">WPA2 と WPA3 の両方に対応（トランジションモード）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="hbox orange mt16" style="font-size:14px;">
+    <strong>なぜセキュリティ方式を判定する必要があるか：</strong>
+    接続試行の手順がセキュリティ方式によって異なるため、
+    接続前に各 AP の方式を知る必要がある。
+    また、地域・施設ごとのセキュリティ水準を把握することが研究上の目的でもある。
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S5 セキュリティ判定の仕組み
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 2 — セキュリティ判定</div>
+  <h2>AP のセキュリティ方式をどうやって知るか</h2>
+  <p class="lead">
+    Android は、AP のビーコン信号を解析してセキュリティ種別を整数コードで返す
+    公式 API（<code>ScanResult.getSecurityTypes()</code>）を提供している。
+  </p>
+  <hr class="rule">
+
+  <div class="cols">
+    <div>
+      <div class="card">
+        <div class="card-title">ビーコンとは</div>
+        <div class="card-body">
+          AP が定期的に発信している「自己紹介の電波」。
+          SSID（WiFi名）・セキュリティ方式・対応速度などの情報が含まれる。
+          スマートフォンはこれを受信して周辺の AP を検出する。
+        </div>
+      </div>
+      <div class="card mt12">
+        <div class="card-title">getSecurityTypes() とは</div>
+        <div class="card-body">
+          Android 13（2022年）以降で利用可能な公式 API。
+          OS がビーコンを解析した結果を整数の配列で返す。
+          1 つの AP が複数の方式に対応している場合、複数の値が返る。
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="hbox green">
+        <strong>この方法の利点</strong><br>
+        OS が正式に解析した結果であるため、
+        端末の種類や Android バージョンによる
+        表現のばらつきをアプリ側で吸収する必要がない。
+        SAE（WPA3の認証方式）や OWE（機会的暗号化）なども
+        明確に区別される。
+      </div>
+      <div class="hbox gray mt12">
+        <strong>古い端末（Android 12 以前）の場合</strong><br>
+        上記 API が使えないため、AP が発信する文字列情報
+        （capabilities_raw）を解析する従来の方法を使う。
+        アプリは端末の OS バージョンを確認して自動的に切り替える。
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S6 6カテゴリへの分類
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 2 — 分類結果</div>
+  <h2>判定の結果：6 つのカテゴリ</h2>
+  <p class="lead">
+    取得したセキュリティ種別をもとに、各 AP を 6 つのカテゴリに分類する。
+    この分類が次の「接続試行」の方法を決める。
+  </p>
+  <hr class="rule">
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:20%;">カテゴリ</th>
+        <th style="width:30%;">判定の根拠</th>
+        <th style="width:25%;">接続試行での扱い</th>
+        <th>主な例</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge b-teal">WPA2/WPA3</span></td>
+        <td style="font-size:13px;">PSK かつ SAE の両方を検出</td>
+        <td style="font-size:13px;">WPA3 方式で試行</td>
+        <td style="font-size:13px; color:#556;">新旧端末対応 AP</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-blue">WPA3</span></td>
+        <td style="font-size:13px;">SAE / OWE / WPA3-Enterprise を検出</td>
+        <td style="font-size:13px;">WPA3 方式で試行</td>
+        <td style="font-size:13px; color:#556;">新規設置の AP</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-blue" style="background:#2a5aa8;">WPA2</span></td>
+        <td style="font-size:13px;">PSK のみ（WPA2 と判別）</td>
+        <td style="font-size:13px;">WPA2 方式で試行</td>
+        <td style="font-size:13px; color:#556;">家庭・一般企業</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-blue" style="background:#3a6abf;">WPA</span></td>
+        <td style="font-size:13px;">PSK のみ（WPA と判別）</td>
+        <td style="font-size:13px;">WPA2 方式で試行</td>
+        <td style="font-size:13px; color:#556;">古い機器</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-red">WEP</span></td>
+        <td style="font-size:13px;">WEP を検出</td>
+        <td style="font-size:13px; color:#b03030;"><strong>接続試行しない</strong></td>
+        <td style="font-size:13px; color:#556;">非常に古い機器</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-green">Open</span></td>
+        <td style="font-size:13px;">上記いずれも非検出</td>
+        <td style="font-size:13px;">パスワードなしで試行</td>
+        <td style="font-size:13px; color:#556;">公衆WiFi 等</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="hbox gray mt16" style="font-size:13px;">
+    <strong>WEP について：</strong>
+    WEP はセキュリティ上の問題から Android が接続をサポートしていないため、
+    このアプリでは接続試行をスキップする。
+    ただし AP の存在自体は記録する。
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S7 接続試行とは
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 3 — 接続試行</div>
+  <h2>Supplicant 測定とは何か</h2>
+  <p class="lead">
+    各 AP に「ダミーのパスワード」で接続を試み、WiFi 接続プロセスが
+    どの段階まで進んだかを記録する測定。
+  </p>
+  <hr class="rule">
+
+  <div class="cols">
+    <div>
+      <div class="card">
+        <div class="card-title">WiFi 接続は複数のステップで成立する</div>
+        <div class="card-body" style="font-size:14px; line-height:2;">
+          接続開始 → AP を探索（SCANNING）<br>
+          → 認証（AUTHENTICATING）<br>
+          → 接続要求（ASSOCIATING）<br>
+          → 接続確立（ASSOCIATED）<br>
+          → 鍵交換（FOUR_WAY_HANDSHAKE）<br>
+          → 完了（COMPLETED）
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="hbox" style="font-size:14px;">
+        <strong>何を記録するか</strong><br>
+        上記の各ステップへの遷移を順番にリストで記録する。
+        パスワードが違えば途中で切断され、
+        Open AP なら COMPLETED まで到達する。
+        どの段階で止まったかが AP の特性を示す。
+      </div>
+      <div class="hbox green mt12" style="font-size:14px;">
+        <strong>なぜダミーパスワードを使うか</strong><br>
+        実際のパスワードを知らなくても接続プロセスの途中段階まで
+        進めることができ、AP の存在確認・状態遷移の記録が可能。
+        接続が完了することは稀（Open AP を除く）。
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S8 接続試行の方法
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 3 — 接続試行ルール</div>
+  <h2>セキュリティカテゴリごとの接続方法</h2>
+  <p class="lead">
+    WiFi の接続手順はセキュリティ方式によって異なる。
+    アプリはカテゴリに応じて適切な接続方法を選択する。
+  </p>
+  <hr class="rule">
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:20%;">カテゴリ</th>
+        <th>接続方法</th>
+        <th style="width:28%;">備考</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:#fff5f5;">
+        <td><span class="badge b-red">WEP</span></td>
+        <td style="font-size:13px; color:#b03030;"><strong>スキップ</strong>（接続試行しない）</td>
+        <td style="font-size:13px;">Android が WEP 接続に非対応</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-green">Open</span></td>
+        <td style="font-size:13px;">パスワードなしで接続要求</td>
+        <td style="font-size:13px;">COMPLETED まで到達することがある</td>
+      </tr>
+      <tr>
+        <td>
+          <span class="badge b-blue" style="background:#2a5aa8;">WPA2</span>
+          <span class="badge b-blue" style="background:#3a6abf; margin-left:4px;">WPA</span>
+        </td>
+        <td style="font-size:13px;">WPA2 方式でダミーパスワードを送信</td>
+        <td style="font-size:13px;">鍵交換フェーズで失敗する</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-teal">WPA2/WPA3</span></td>
+        <td style="font-size:13px;">WPA3（SAE）方式でダミーパスワードを送信</td>
+        <td style="font-size:13px;">より安全な新方式で試行</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-blue">WPA3</span></td>
+        <td style="font-size:13px;">WPA3（SAE）方式でダミーパスワードを送信</td>
+        <td style="font-size:13px;">—</td>
+      </tr>
+      <tr>
+        <td style="font-size:13px; color:#556;">EAP 系（企業向け認証）</td>
+        <td style="font-size:13px;">Enterprise 用設定（PEAP + ダミー認証情報）</td>
+        <td style="font-size:13px;">WPA3-Enterprise は専用 API を使用</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="hbox gray mt16" style="font-size:13px;">
+    EAP（Enterprise 認証）は、カテゴリが WPA2 / WPA3 でも
+    企業向け認証方式を使っている場合は Enterprise 用接続に切り替える。
+    OS が提供する構造化情報からこれを正確に判別している。
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S9 OSからの応答
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 3 — 状態記録</div>
+  <h2>接続試行中に OS から届く 3 種類の情報</h2>
+  <p class="lead">
+    アプリは接続試行の開始後、OS から届く 3 種類の情報を組み合わせて
+    「どこまで接続が進んだか」を判定する。
+  </p>
+  <hr class="rule">
+
+  <div class="card">
+    <div class="card-title" style="color:#1d57b0;">① WiFi 内部状態の変化通知（SupplicantState）</div>
+    <div class="card-body">
+      WiFi の接続プロセスが次のステップに進むたびに、OS からアプリへ通知が届く。
+      アプリはこの通知を受け取るたびに状態名をリストに追記していく。
+      これが <strong>supplicant_states（状態遷移リスト）</strong> としてデータに記録される。
+    </div>
+  </div>
+
+  <div class="card mt12">
+    <div class="card-title" style="color:#237038;">② 接続成否の通知（NetworkCallback）</div>
+    <div class="card-body">
+      OS が「接続に成功した」と判断した場合 → <strong>onAvailable（成功通知）</strong> が届く。<br>
+      OS が「接続できない」と判断した場合 → <strong>onUnavailable（失敗通知）</strong> が届く。<br>
+      いずれかが届いた時点で、そのAPの測定を終了する。
+    </div>
+  </div>
+
+  <div class="card mt12">
+    <div class="card-title" style="color:#b86020;">③ タイムアウト（最大 15 秒）</div>
+    <div class="card-body">
+      ①② のいずれも届かないまま 15 秒が経過した場合、測定を強制終了する。
+      これは Android のダイアログ表示有無や AP の応答遅延に左右されるためのタイムアウト。
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S10 最終状態の種類
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 3 — 測定結果</div>
+  <h2>接続試行の結果：最終状態の種類</h2>
+  <p class="lead">
+    3 種類の情報を組み合わせて、各 AP の「最終状態」を 1 つ決定する。
+    最終状態は「どこまで接続プロセスが進んだか」を示す。
+  </p>
+  <hr class="rule">
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:16%;">グループ</th>
+        <th style="width:38%;">最終状態</th>
+        <th>意味</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:#f0eef8;">
+        <td><span class="badge b-purple">測定不可</span></td>
+        <td><span class="fs fs-skip">SKIPPED</span></td>
+        <td style="font-size:13px;">WEP — Android が接続非対応</td>
+      </tr>
+      <tr style="background:#eef7f0;">
+        <td><span class="badge b-green">成功</span></td>
+        <td><span class="fs fs-ok">COMPLETED</span></td>
+        <td style="font-size:13px;">接続が完了した（Open AP で起こりやすい）</td>
+      </tr>
+      <tr>
+        <td rowspan="2"><span class="badge b-gray">未到達</span></td>
+        <td><span class="fs fs-none">NOT_FOUND</span></td>
+        <td style="font-size:13px;">AP 自体が見つからなかった（電波が届かない等）</td>
+      </tr>
+      <tr>
+        <td><span class="fs fs-none">FAILED_AT_DIALOG_TIMEOUT</span></td>
+        <td style="font-size:13px;">15 秒で何も届かなかった</td>
+      </tr>
+      <tr style="background:#fff5f5;">
+        <td rowspan="3"><span class="badge b-red">失敗</span></td>
+        <td><span class="fs fs-fail">FAILED_AT_DISCONNECTED</span></td>
+        <td style="font-size:13px;">認証失敗などで切断された</td>
+      </tr>
+      <tr style="background:#fff5f5;">
+        <td><span class="fs fs-fail">FAILED_AT_INACTIVE</span></td>
+        <td style="font-size:13px;">非活性状態で終了</td>
+      </tr>
+      <tr style="background:#fff5f5;">
+        <td><span class="fs fs-fail">FAILED_AT_SCANNING</span></td>
+        <td style="font-size:13px;">AP を探索中に終了（電波が弱い等）</td>
+      </tr>
+      <tr style="background:#fffdf0;">
+        <td rowspan="2"><span class="badge b-orange">途中停止</span></td>
+        <td><span class="fs fs-tout">TIMEOUT_AT_FOUR_WAY_HANDSHAKE</span> 等</td>
+        <td style="font-size:13px;">鍵交換など特定の段階で 15 秒に達した</td>
+      </tr>
+      <tr style="background:#fffdf0;">
+        <td><span class="fs fs-tout">TIMEOUT_AT_COMPLETED</span> ⚠</td>
+        <td style="font-size:13px;">L2 接続済みだが OS の成功通知が未着</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════
+     S11 収集・送信データ
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 4 — データ送信</div>
+  <h2>サーバーへ送信するデータの構造</h2>
+  <p class="lead">
+    1 回のスキャンで検出した全 AP の情報をまとめて JSON 形式でサーバーへ送信する。
+    送信できない場合は端末内に保存し、次回以降に自動再送する。
+  </p>
+  <hr class="rule">
+
+  <div class="cols">
+    <div>
+      <div class="card">
+        <div class="card-title">スキャン単位の情報（1スキャンにつき1件）</div>
+        <div class="card-body" style="font-size:14px; line-height:2;">
+          ・<strong>scan_id</strong>：スキャンを識別する ID<br>
+          ・<strong>device_id</strong>：端末を識別する ID（永続）<br>
+          ・<strong>device</strong>：端末メーカー・機種名・Android バージョン<br>
+          ・<strong>scanned_at</strong>：測定日時<br>
+          ・<strong>label</strong>：セッションラベル（任意）<br>
+          ・<strong>location</strong>：GPS 緯度・経度・精度（取得できれば）
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">AP ごとの情報（検出 AP 数ぶん繰り返し）</div>
+        <div class="card-body" style="font-size:14px; line-height:2;">
+          ・<strong>bssid</strong>：AP を識別する MAC アドレス<br>
+          ・<strong>ssids</strong>：WiFi 名（SSID）の一覧<br>
+          ・<strong>rssi_dbm</strong>：電波強度<br>
+          ・<strong>band / frequency_mhz</strong>：周波数帯<br>
+          ・<strong>wifi_standard</strong>：WiFi 世代（802.11n/ac/ax 等）<br>
+          ・<strong>security</strong>：セキュリティカテゴリ<br>
+          ・<strong>supplicant_states</strong>：状態遷移リスト<br>
+          ・<strong>supplicant_final_state</strong>：最終状態
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S12 まとめ
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">まとめ</div>
+  <h2>このアプリが実現すること</h2>
+  <p class="lead">
+    スマートフォン 1 台で、屋外を含む任意の場所で無線LAN環境の詳細な測定ができる。
+  </p>
+  <hr class="rule">
+
+  <ul class="num-list">
+    <li>
+      <span class="num">1</span>
+      <span>
+        <strong>WiFi スキャン</strong>で周辺の AP を自動検出し、電波強度・周波数帯・WiFi 世代を取得する。
+      </span>
+    </li>
+    <li>
+      <span class="num">2</span>
+      <span>
+        <strong>セキュリティ方式の判定</strong>は Android の公式 API（OS 13+）を優先し、
+        古い端末では文字列解析にフォールバックする。判定結果は 6 カテゴリ。
+      </span>
+    </li>
+    <li>
+      <span class="num">3</span>
+      <span>
+        <strong>接続試行（Supplicant 測定）</strong>でカテゴリに応じた方法で接続を試み、
+        WiFi 内部の状態遷移を記録する。WEP はスキップ。
+      </span>
+    </li>
+    <li>
+      <span class="num">4</span>
+      <span>
+        <strong>データ送信</strong>で測定結果を JSON 形式でサーバーへ送信する。
+        未送信分は端末内に蓄積し、次回以降に再送する。
+      </span>
+    </li>
+  </ul>
+
+  <div class="hbox green mt16" style="font-size:14px;">
+    <strong>研究上の意義：</strong>
+    セキュリティ方式・電波強度・接続到達状態を地点情報と紐付けることで、
+    「どの地域でどのような WiFi 環境が整備されているか」を
+    大規模・定量的に把握できるデータ基盤を構築する。
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<div id="nav">
+  <button id="btn-prev" disabled>← 前へ</button>
+  <span id="slide-counter">1 / 12</span>
+  <button id="btn-next">次へ →</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total  = slides.length;
+  let current  = 0;
+
+  function go(n) {
+    slides[current].classList.remove('active');
+    current = Math.max(0, Math.min(total - 1, n));
+    slides[current].classList.add('active');
+    document.getElementById('slide-counter').textContent = `${current + 1} / ${total}`;
+    document.getElementById('btn-prev').disabled = current === 0;
+    document.getElementById('btn-next').disabled = current === total - 1;
+    document.getElementById('progress').style.width = `${((current + 1) / total) * 100}%`;
+  }
+
+  document.getElementById('btn-prev').addEventListener('click', () => go(current - 1));
+  document.getElementById('btn-next').addEventListener('click', () => go(current + 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   go(current - 1);
+  });
+
+  document.getElementById('deck').addEventListener('click', e => {
+    if (!e.target.closest('#nav')) go(current + 1);
+  });
+
+  go(0);
+</script>
+</body>
+</html>

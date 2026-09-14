@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>接続施行測定（SSID）— 実装要件定義（2026-09-10）</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue-dark: #0d1f45;
+      --blue-mid:  #1d57b0;
+      --blue-light:#e8f0fb;
+      --green:     #1a7f5a;
+      --green-bg:  #eaf7f2;
+      --red:       #c0392b;
+      --red-bg:    #fdf2f0;
+      --yellow:    #b8860b;
+      --yellow-bg: #fef9e7;
+      --gray:      #5a6272;
+      --border:    #d4dae6;
+    }
+
+    body {
+      font-family: 'Hiragino Sans', 'Meiryo', 'Segoe UI', sans-serif;
+      background: #eef1f7;
+      color: #1a1e2e;
+      line-height: 1.75;
+    }
+
+    .page { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    .cover {
+      background: var(--blue-dark);
+      color: #eef2ff;
+      padding: 52px 48px;
+      border-radius: 12px;
+      margin-bottom: 36px;
+    }
+    .cover .tag {
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: #7eb8ff; margin-bottom: 16px;
+    }
+    .cover h1 { font-size: 30px; font-weight: 900; line-height: 1.3; margin-bottom: 12px; }
+    .cover .sub { font-size: 15px; color: rgba(255,255,255,0.65); }
+
+    section { margin-bottom: 36px; }
+    .sec-header {
+      display: flex; align-items: center; gap: 10px;
+      border-bottom: 2px solid var(--blue-mid);
+      padding-bottom: 8px; margin-bottom: 20px;
+    }
+    .sec-num {
+      background: var(--blue-mid); color: #fff;
+      font-size: 12px; font-weight: 800;
+      padding: 2px 8px; border-radius: 4px;
+    }
+    .sec-title { font-size: 20px; font-weight: 800; color: var(--blue-dark); }
+
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14px; font-weight: 800;
+      color: var(--blue-mid); margin-bottom: 10px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    /* flow */
+    .flow { list-style: none; counter-reset: flow; }
+    .flow li {
+      counter-increment: flow;
+      display: flex; gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .flow li:last-child { border-bottom: none; }
+    .flow li::before {
+      content: counter(flow);
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      background: var(--blue-mid); color: #fff;
+      font-size: 13px; font-weight: 800;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .flow-body { flex: 1; }
+    .flow-main { font-weight: 700; margin-bottom: 4px; }
+    .flow-sub { font-size: 13px; color: var(--gray); }
+
+    /* badge */
+    .badge {
+      display: inline-block;
+      font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 4px;
+      margin-right: 6px;
+    }
+    .badge-auto  { background: var(--green-bg); color: var(--green); }
+    .badge-user  { background: var(--yellow-bg); color: var(--yellow); }
+    .badge-os    { background: var(--red-bg); color: var(--red); }
+
+    /* constraint box */
+    .constraint {
+      background: var(--red-bg);
+      border-left: 4px solid var(--red);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+    }
+    .constraint-title { font-weight: 800; color: var(--red); margin-bottom: 4px; }
+
+    /* note box */
+    .note {
+      background: var(--yellow-bg);
+      border-left: 4px solid var(--yellow);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+    }
+
+    /* ok box */
+    .ok {
+      background: var(--green-bg);
+      border-left: 4px solid var(--green);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+    }
+
+    /* UI table */
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th {
+      background: var(--blue-light);
+      color: var(--blue-dark);
+      padding: 10px 14px;
+      text-align: left; font-weight: 800;
+    }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .new-tag {
+      font-size: 10px; font-weight: 800;
+      background: var(--green); color: #fff;
+      padding: 1px 5px; border-radius: 3px; margin-left: 6px;
+    }
+    .changed-tag {
+      font-size: 10px; font-weight: 800;
+      background: var(--yellow); color: #fff;
+      padding: 1px 5px; border-radius: 3px; margin-left: 6px;
+    }
+
+    /* json */
+    pre {
+      background: #1a1e2e;
+      color: #c9d6f0;
+      border-radius: 8px;
+      padding: 18px 20px;
+      font-size: 13px;
+      line-height: 1.6;
+      overflow-x: auto;
+      margin-top: 12px;
+    }
+    .json-key { color: #7eb8ff; }
+    .json-str { color: #98d982; }
+    .json-arr { color: #f0c27f; }
+    .json-null { color: #f08080; }
+
+    p { margin-bottom: 10px; }
+    ul { padding-left: 20px; margin-bottom: 10px; }
+    li { margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- cover -->
+  <div class="cover">
+    <div class="tag">Implementation Spec · 2026-09-10</div>
+    <h1>接続施行測定（SSID）<br>実装要件定義</h1>
+    <div class="sub">SsidMeasurementActivity — セッション型・複数地点測定フロー</div>
+  </div>
+
+  <!-- 1. 概要 -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">1</span>
+      <span class="sec-title">概要と目的</span>
+    </div>
+    <div class="card">
+      <p>接続施行測定（SSID）は、ユーザが選択したSSIDを持つBSSID（AP）に対して順次接続試行（Supplicant測定）を行い、複数地点を移動しながら繰り返し測定するためのアクティビティである。</p>
+      <p>接続施行測定（AP）との主な違いは、</p>
+      <ul>
+        <li>リスト表示単位が <strong>BSSID（物理AP）</strong> ではなく <strong>SSID（論理ネットワーク）</strong></li>
+        <li>測定がワンショットではなく <strong>セッション型の繰り返し</strong> になること</li>
+      </ul>
+      <p>内部データ構造・送信スキーマはAP版と同一。測定対象はBSSIDのまま。</p>
+    </div>
+  </section>
+
+  <!-- 2. セッション構造 -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">2</span>
+      <span class="sec-title">セッション構造</span>
+    </div>
+    <div class="card">
+      <div class="card-title">定義</div>
+      <ul>
+        <li><strong>セッション</strong> = 複数地点にわたる一連の測定をまとめた1単位</li>
+        <li>セッション開始時刻〜終了時刻の範囲で <strong>label</strong> を生成（AP版の自動スキャンと同方式）</li>
+        <li>セッション中のすべてのスキャンエントリは同一の <code>session_uuid</code> をlabelとして保持し、セッション終了時にタイムスタンプ文字列（例: <code>2026/09/10 13:00~13:45</code>）へ一括更新する</li>
+        <li>選択SSIDはセッション開始時に確定し、セッション終了まで固定</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3. 測定フロー -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">3</span>
+      <span class="sec-title">測定フロー（1セッション）</span>
+    </div>
+    <div class="card">
+      <ul class="flow">
+        <li>
+          <div class="flow-body">
+            <div class="flow-main">スキャン実行</div>
+            <div class="flow-sub">
+              <span class="badge badge-user">ユーザ操作</span>スキャンボタンを押す。SSIDグループ単位でリスト表示。
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="flow-body">
+            <div class="flow-main">測定対象SSIDを選択</div>
+            <div class="flow-sub">
+              <span class="badge badge-user">ユーザ操作</span>チェックボックスで測定したいSSIDを選択。「セッション開始」ボタンが有効化される。
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="flow-body">
+            <div class="flow-main">セッション開始</div>
+            <div class="flow-sub">
+              <span class="badge badge-user">ユーザ操作</span>「セッション開始」ボタンをタップ（確認ダイアログなし）。選択SSIDが固定され、セッション開始時刻を記録。選択SSIDの全BSSIDへの接続試行を即座に開始。
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="flow-body">
+            <div class="flow-main">BSSID単位で順次接続試行</div>
+            <div class="flow-sub">
+              <span class="badge badge-auto">自動</span>選択SSIDに紐づく全BSSIDへ順次Supplicant測定。<br>
+              <span class="badge badge-os">OS制御</span>接続確認ダイアログはAndroid OSが制御。ユーザはダイアログ応答のみ担当。
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="flow-body">
+            <div class="flow-main">測定完了 → 移動待ち表示</div>
+            <div class="flow-sub">
+              <span class="badge badge-auto">自動</span>「次の測定場所に移動してください」を画面表示。「移動完了・測定開始」「セッション終了」ボタンを表示。
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="flow-body">
+            <div class="flow-main">移動 → 次の地点で測定開始</div>
+            <div class="flow-sub">
+              <span class="badge badge-user">ユーザ操作</span>「移動完了・測定開始」ボタンをタップ。<br>
+              <span class="badge badge-auto">自動</span>スキャン実行 → 選択SSIDのBSSIDを抽出 → 接続試行（手順4へ）。
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="flow-body">
+            <div class="flow-main">セッション終了</div>
+            <div class="flow-sub">
+              <span class="badge badge-user">ユーザ操作</span>「セッション終了」ボタンをタップ。ラベルダイアログ表示（AP版と同様）。セッション全体のエントリのlabelをタイムスタンプ文字列に一括更新。
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+    <div class="constraint">
+      <div class="constraint-title">Android OS制約</div>
+      接続試行ダイアログ（「〜に接続しますか？」）はAndroid OSが制御する。アプリは <code>requestNetwork()</code> を呼ぶのみで、ダイアログ表示・接続処理はOS任せ。このためステップ4の完全自動化は不可能。
+    </div>
+  </section>
+
+  <!-- 4. 選択SSIDが見つからない場合 -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">4</span>
+      <span class="sec-title">選択SSIDが見つからない場合の処理</span>
+    </div>
+    <div class="card">
+      <p>移動後のスキャンで、セッション開始時に選択したSSIDがスキャン結果に含まれない場合：</p>
+      <ol style="padding-left:20px; margin-top:8px;">
+        <li>「選択したSSIDが見つかりませんでした（一覧）」ダイアログを表示</li>
+        <li>スキャンエントリを保存（見つかったAPのみ記録、空の場合は <code>access_points: []</code>）</li>
+        <li>そのまま移動待ち状態に移行。「移動完了・測定開始」「セッション終了」を表示</li>
+      </ol>
+    </div>
+    <div class="ok">
+      <strong>「見つからなかった」の表現方法（案A採用）</strong><br>
+      <code>not_found_ssids</code> フィールドは持たない。<strong>差分</strong> で表現する：<br>
+      <code>targeted_ssids</code>（対象SSID一覧）にあって <code>access_points[].ssids</code> に存在しないSSID ＝ そのエントリで見つからなかったSSID、とする。
+    </div>
+  </section>
+
+  <!-- 5. JSONスキーマ変更 -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">5</span>
+      <span class="sec-title">送信JSONスキーマの変更点</span>
+    </div>
+    <div class="card">
+      <div class="card-title">追加フィールド</div>
+      <p><code>targeted_ssids</code> フィールドをスキャンエントリのトップレベルに追加する。その他のフィールドはAP版と同一。</p>
+      <pre><span class="json-key">"scan_id"</span>: <span class="json-str">"uuid"</span>,
+<span class="json-key">"device_id"</span>: <span class="json-str">"uuid"</span>,
+<span class="json-key">"scanned_at"</span>: <span class="json-str">"2026-09-10T13:05:00"</span>,
+<span class="json-key">"label"</span>: <span class="json-str">"session-uuid"</span>,  <span style="color:#888;">← セッション終了後タイムスタンプに更新</span>
+<span class="json-key">"targeted_ssids"</span>: <span class="json-arr">["MyWifi", "CafeWifi"]</span>,  <span style="color:#888;">← 新規追加</span>
+<span class="json-key">"location"</span>: { <span class="json-key">"latitude"</span>: 35.1, <span class="json-key">"longitude"</span>: 135.1, <span class="json-key">"accuracy_m"</span>: 5.0 },
+<span class="json-key">"access_points"</span>: [
+  {
+    <span class="json-key">"bssid"</span>: <span class="json-str">"aa:bb:cc:dd:ee:01"</span>,
+    <span class="json-key">"ssids"</span>: <span class="json-arr">["MyWifi"]</span>,
+    <span class="json-key">"supplicant_final_state"</span>: <span class="json-str">"COMPLETED"</span>,
+    <span style="color:#888;">... （既存フィールド）</span>
+  }
+  <span style="color:#888;">← "CafeWifi" が見つからなかった場合はここに現れない（差分で把握）</span>
+]</pre>
+    </div>
+    <div class="note">
+      <strong>targeted_ssids の役割</strong><br>
+      <code>targeted_ssids</code> − <code>access_points[].ssids の和集合</code> ＝ そのエントリで見つからなかったSSID。分析時に「どの地点でどのSSIDが消えたか」を追跡できる。
+    </div>
+  </section>
+
+  <!-- 6. UI変更 -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">6</span>
+      <span class="sec-title">UI変更点</span>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>要素</th><th>変更内容</th><th>表示タイミング</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>btnMeasureSelected<span class="changed-tag">変更</span></td>
+            <td>テキストを「セッション開始 (N件選択中)」に変更。確認ダイアログを廃止し即座に測定開始。</td>
+            <td>SSID選択モード時</td>
+          </tr>
+          <tr>
+            <td>btnNextLocation<span class="new-tag">新規</span></td>
+            <td>「移動完了・測定開始」。タップするとスキャン→接続試行を自動実行。</td>
+            <td>各サイクルの測定完了後</td>
+          </tr>
+          <tr>
+            <td>btnEndSession<span class="new-tag">新規</span></td>
+            <td>「セッション終了」。タップするとラベルダイアログを表示。</td>
+            <td>各サイクルの測定完了後</td>
+          </tr>
+          <tr>
+            <td>tvSsidCount<span class="changed-tag">変更</span></td>
+            <td>セッション状態に応じてメッセージを切り替え。<br>
+              測定中：「セッション測定中 N/M (残りX件): SSID名」<br>
+              待機中：「測定完了 — 次の測定場所に移動してください」<br>
+              SSID未検出：「選択したSSIDが見つかりませんでした」
+            </td>
+            <td>常時</td>
+          </tr>
+          <tr>
+            <td>btnScan</td>
+            <td>セッションアクティブ中は無効化。</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>switchAutoScan</td>
+            <td>引き続き無効（isEnabled = false）。セッション型がその代替。</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 7. 状態遷移 -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">7</span>
+      <span class="sec-title">画面状態遷移</span>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>状態</th><th>表示要素</th><th>遷移トリガー</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>IDLE</strong></td>
+            <td>btnScan有効 / tvEmpty表示</td>
+            <td>セッション終了 or 初期</td>
+          </tr>
+          <tr>
+            <td><strong>SSID_SELECTION</strong></td>
+            <td>RecyclerView（選択モード）/ btnMeasureSelected（セッション開始）/ btnSelectAll</td>
+            <td>スキャン完了（セッション非アクティブ時）</td>
+          </tr>
+          <tr>
+            <td><strong>MEASURING</strong></td>
+            <td>RecyclerView（測定中カラー）/ btnStopMeasurement / tvSsidCount（進捗）</td>
+            <td>セッション開始 or 移動完了・測定開始</td>
+          </tr>
+          <tr>
+            <td><strong>WAITING_MOVE</strong></td>
+            <td>RecyclerView（結果表示）/ btnNextLocation / btnEndSession / tvSsidCount（案内文）</td>
+            <td>測定完了 or SSID未検出</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 8. 実装ファイル -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">8</span>
+      <span class="sec-title">変更対象ファイル</span>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>ファイル</th><th>変更内容</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>activity_ssid_measurement.xml</code></td>
+            <td>btnNextLocation・btnEndSession を追加。制約更新。</td>
+          </tr>
+          <tr>
+            <td><code>SsidMeasurementActivity.kt</code></td>
+            <td>セッション状態変数追加。btnMeasureSelected挙動変更。btnNextLocation・btnEndSession ハンドラ追加。onScanResultsReady() にセッション分岐追加。startMeasurementCycle() ヘルパー抽出。</td>
+          </tr>
+          <tr>
+            <td><code>ScanData.kt</code></td>
+            <td>SsidApAdapter に getSelectedSsids() を追加。</td>
+          </tr>
+          <tr>
+            <td><code>ScanData.kt</code> (定数)</td>
+            <td>PENDING_SSID_FILE は既存。変更なし。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
