@@ -33,6 +33,10 @@ class DetailMenuActivity : AppCompatActivity() {
             startActivity(Intent(this, ConnectionMeasurementActivity::class.java))
         }
 
+        findViewById<Button>(R.id.btnSecurityMeasurement).setOnClickListener {
+            startActivity(Intent(this, SecurityMeasurementActivity::class.java))
+        }
+
         findViewById<Button>(R.id.btnThroughputMeasurement).setOnClickListener {
             startActivity(Intent(this, ThroughputActivity::class.java))
         }

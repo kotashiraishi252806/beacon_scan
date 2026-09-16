@@ -69,6 +69,20 @@ fun getSecurity(result: ScanResult): String =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) getSecurityFromTypes(result)
     else getSecurityFromCapabilities(result.capabilities)
 
+// capabilities_raw 文字列から先行研究の5分類に当てはめる。
+// 優先順位: WPA3-SAE > WPA2-EAP > WPA2-PSK > WPA-PSK > Open > その他
+// WPA2/WPA3トランジション([RSN-PSK+SAE-CCMP])は-SAEに非該当のためWPA2-PSKに分類される。
+fun getSecurityGroup(capabilities: String): String = when {
+    capabilities.contains("-SAE")                                         -> "WPA3-SAE"
+    capabilities.contains("EAP")                                          -> "WPA2-EAP"
+    (capabilities.contains("WPA2") || capabilities.contains("RSN"))
+        && capabilities.contains("PSK")                                   -> "WPA2-PSK"
+    capabilities.contains("WPA") && capabilities.contains("PSK")         -> "WPA-PSK"
+    !capabilities.contains("WPA") && !capabilities.contains("WEP")
+        && !capabilities.contains("OWE")                                  -> "Open"
+    else                                                                   -> "その他"
+}
+
 fun groupBySsid(accessPoints: List<AccessPoint>): List<SsidGroup> {
     val grouped = mutableMapOf<String, MutableList<AccessPoint>>()
     for (ap in accessPoints) {
@@ -77,6 +91,19 @@ fun groupBySsid(accessPoints: List<AccessPoint>): List<SsidGroup> {
     }
     return grouped.map { (ssid, aps) -> SsidGroup(ssid, aps) }
         .sortedByDescending { group -> group.accessPoints.maxOf { it.rssiDbm } }
+}
+
+private val SECURITY_GROUP_ORDER = listOf("Open", "WPA-PSK", "WPA2-PSK", "WPA2-EAP", "WPA3-SAE", "その他")
+
+fun groupBySecurityGroup(accessPoints: List<AccessPoint>): List<SecurityGroup> {
+    val grouped = mutableMapOf<String, MutableList<AccessPoint>>()
+    for (ap in accessPoints) {
+        val key = getSecurityGroup(ap.capabilitiesRaw)
+        grouped.getOrPut(key) { mutableListOf() }.add(ap)
+    }
+    return grouped.map { (sec, aps) ->
+        SecurityGroup(sec, aps.sortedByDescending { it.rssiDbm }.toMutableList())
+    }.sortedBy { SECURITY_GROUP_ORDER.indexOf(it.securityGroup).let { i -> if (i < 0) Int.MAX_VALUE else i } }
 }
 
 @Suppress("DEPRECATION")

@@ -524,7 +524,7 @@ class SimpleMeasurementActivity : AppCompatActivity() {
                     conn.doOutput = true
                     conn.connectTimeout = 5000
                     conn.readTimeout = 10000
-                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString()) }
+                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/")) }
                     val code = conn.responseCode
                     Log.d("BeaconScan", "simple response: $code")
                     conn.disconnect()
@@ -618,10 +618,10 @@ OFFにした際に開始〜終了時刻のラベルを自動生成し、
 同一セッションのデータをまとめて管理できます。
 
 ━━━━━━━━━━━━━━━━━━
-【接続施行測定（AP）との違い】
+【サプリカント状態取得（AP）との違い】
 ━━━━━━━━━━━━━━━━━━
 簡易測定はスキャンのみ。
-接続施行測定（AP）は各APへの接続試行データ（supplicant状態）も取得します。
+サプリカント状態取得（AP）は各APへの接続試行データ（supplicant状態）も取得します。
         """.trimIndent()
 
         AlertDialog.Builder(this)

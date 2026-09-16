@@ -12,7 +12,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:title="接続施行測定（AP）" />
+        app:title="サプリカント状態取得（AP）" />
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/tilUrl"
@@ -194,6 +194,36 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btnToggleList" />
 
+    <LinearLayout
+        android:id="@+id/layoutMoveButtons"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/btnMeasureSelected"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <Button
+            android:id="@+id/btnNextLocation"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="移動完了・測定開始" />
+
+        <Button
+            android:id="@+id/btnEndSession"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="セッション終了" />
+
+    </LinearLayout>
+
     <TextView
         android:id="@+id/tvEmpty"
         android:layout_width="wrap_content"
@@ -205,7 +235,7 @@
         app:layout_constraintBottom_toTopOf="@id/btnHelp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnMeasureSelected" />
+        app:layout_constraintTop_toBottomOf="@id/layoutMoveButtons" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
@@ -217,7 +247,7 @@
         app:layout_constraintBottom_toTopOf="@id/btnHelp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnMeasureSelected" />
+        app:layout_constraintTop_toBottomOf="@id/layoutMoveButtons" />
 
     <ImageButton
         android:id="@+id/btnHelp"

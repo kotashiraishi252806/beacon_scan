@@ -12,7 +12,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:title="接続施行測定（SSID）" />
+        app:title="サプリカント状態取得（SSID）" />
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/tilUrl"

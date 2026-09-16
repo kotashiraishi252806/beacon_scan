@@ -71,6 +71,9 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
     private lateinit var btnStopMeasurement: Button
     private lateinit var btnMeasureSelected: Button
     private lateinit var btnSelectAll: Button
+    private lateinit var layoutMoveButtons: android.view.ViewGroup
+    private lateinit var btnNextLocation: Button
+    private lateinit var btnEndSession: Button
     private lateinit var switchAutoScan: SwitchCompat
     private lateinit var switchSendMode: SwitchCompat
     private lateinit var etUrl: TextInputEditText
@@ -87,6 +90,11 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
     private var pendingScanId: String? = null
     private var pendingLocation: Location? = null
     private var pendingLabel: String? = null
+
+    // ── セッション ───────────────────────────────────────────
+    private var sessionId: String? = null
+    private var sessionStartTime: Date? = null
+    private var selectedBssids: Set<String> = emptySet()
 
     // ── 位置情報 ─────────────────────────────────────────────
     private var latestLocation: Location? = null
@@ -168,6 +176,9 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         btnStopMeasurement = findViewById(R.id.btnStopMeasurement)
         btnMeasureSelected = findViewById(R.id.btnMeasureSelected)
         btnSelectAll = findViewById(R.id.btnSelectAll)
+        layoutMoveButtons = findViewById(R.id.layoutMoveButtons)
+        btnNextLocation = findViewById(R.id.btnNextLocation)
+        btnEndSession = findViewById(R.id.btnEndSession)
         switchAutoScan = findViewById(R.id.switchAutoScan)
         switchSendMode = findViewById(R.id.switchSendMode)
         etUrl = findViewById(R.id.etUrl)
@@ -212,6 +223,23 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
             btnStopMeasurement.text = "中断中..."
         }
 
+        btnNextLocation.setOnClickListener {
+            layoutMoveButtons.visibility = View.GONE
+            checkPermissionsAndScan()
+        }
+
+        btnEndSession.setOnClickListener {
+            val sid = sessionId ?: return@setOnClickListener
+            val startTime = sessionStartTime ?: return@setOnClickListener
+            sessionId = null
+            sessionStartTime = null
+            selectedBssids = emptySet()
+            hideScanResultsView()
+            btnScan.isEnabled = true
+            tvEmpty.visibility = View.VISIBLE
+            showAutoLabelDialog(sid, startTime)
+        }
+
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         etUrl.setText(prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL))
 
@@ -250,7 +278,6 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
             if (selectedAps.isEmpty()) return@setOnClickListener
             val scanId = pendingScanId ?: return@setOnClickListener
             val location = pendingLocation
-            val label = pendingLabel ?: ""
 
             val count = selectedAps.size
             AlertDialog.Builder(this)
@@ -261,76 +288,12 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
                     "ダイアログの候補はAP1件ずつ表示されるため、最大 ${count} 回のダイアログ操作が必要です。"
                 )
                 .setPositiveButton("開始") { _, _ ->
-                    isInSelectionMode = false
-                    adapter.isSelectionMode = false
-                    btnMeasureSelected.visibility = View.GONE
-                    btnSelectAll.visibility = View.GONE
-                    btnSelectAll.text = "全て選択"
-                    recyclerView.visibility = View.VISIBLE
-                    btnToggleList.text = "閉じる"
-
-                    apList.clear()
-                    apList.addAll(selectedAps)
-                    adapter.notifyDataSetChanged()
-
-                    val currentScanCount = apList.size
-                    tvSsidCount.text = "選択AP: ${currentScanCount}件\nSupplicant測定中..."
-                    btnStopMeasurement.visibility = View.VISIBLE
-                    btnStopMeasurement.isEnabled = true
-                    btnStopMeasurement.text = "測定中断"
-                    isScanInProgress = true
-                    isManualMeasuring = true
-                    adapter.isMeasurementColoring = true
-
-                    lifecycleScope.launch {
-                        val measuredList = measurer.measureAll(
-                            selectedAps,
-                            onProgress = { progress, total, name ->
-                                val remaining = total - progress
-                                tvSsidCount.text = "選択AP: ${currentScanCount}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
-                            },
-                            onApStart = { ap ->
-                                adapter.measuringBssid = ap.bssid
-                                val idx = apList.indexOfFirst { it.bssid == ap.bssid }
-                                if (idx > 0) {
-                                    apList.add(0, apList.removeAt(idx))
-                                }
-                                adapter.notifyDataSetChanged()
-                            },
-                            onApFinished = { result ->
-                                val idx = apList.indexOfFirst { it.bssid == result.bssid }
-                                if (idx >= 0) {
-                                    apList.removeAt(idx)
-                                    apList.add(result)
-                                    adapter.notifyDataSetChanged()
-                                }
-                            }
-                        )
-
-                        btnStopMeasurement.visibility = View.GONE
-                        adapter.measuringBssid = null
-
-                        val measuredByBssid = measuredList.associateBy { it.bssid }
-                        val fullList = apList.map { ap -> measuredByBssid[ap.bssid] ?: ap }
-                        apList.clear()
-                        apList.addAll(fullList)
-                        adapter.notifyDataSetChanged()
-
-                        withContext(Dispatchers.IO) { saveToPending(measuredList, location, scanId, label) }
-                        val totalRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@ConnectionMeasurementActivity) }
-                        tvSsidCount.text = "選択AP: ${currentScanCount}件\n未送信データ合計: ${totalRecords}件"
-                        updatePendingCount()
-
-                        if (switchSendMode.isChecked) {
-                            trySendAllPending()
-                            hideScanResultsView()
-                        }
-
-                        isScanInProgress = false
-                        isManualMeasuring = false
-                        btnScan.isEnabled = true
-                        updatePendingCount()
+                    if (sessionId == null) {
+                        sessionId = UUID.randomUUID().toString()
+                        sessionStartTime = Date()
                     }
+                    selectedBssids = selectedAps.map { it.bssid }.toSet()
+                    startMeasurementCycleAp(selectedAps, location, scanId)
                 }
                 .setNegativeButton("キャンセル", null)
                 .show()
@@ -638,12 +601,91 @@ WiFi接続プロセスの状態遷移を記録する機能。
             .show()
     }
 
+    private fun startMeasurementCycleAp(targetAps: List<AccessPoint>, location: Location?, scanId: String) {
+        val sid = sessionId ?: return
+        val apCount = targetAps.size
+
+        isInSelectionMode = false
+        adapter.isSelectionMode = false
+        btnMeasureSelected.visibility = View.GONE
+        btnSelectAll.visibility = View.GONE
+        btnSelectAll.text = "全て選択"
+        layoutMoveButtons.visibility = View.GONE
+        recyclerView.visibility = View.VISIBLE
+        btnToggleList.visibility = View.VISIBLE
+        btnToggleList.text = "閉じる"
+
+        apList.clear()
+        apList.addAll(targetAps)
+        adapter.isMeasurementColoring = true
+        adapter.notifyDataSetChanged()
+
+        tvSsidCount.text = "セッション測定中 (${apCount}台)..."
+        tvSsidCount.visibility = View.VISIBLE
+        btnStopMeasurement.visibility = View.VISIBLE
+        btnStopMeasurement.isEnabled = true
+        btnStopMeasurement.text = "測定中断"
+        tvEmpty.visibility = View.GONE
+        btnScan.isEnabled = false
+        isScanInProgress = true
+        isManualMeasuring = true
+
+        lifecycleScope.launch {
+            val measuredList = measurer.measureAll(
+                targetAps,
+                onProgress = { progress, total, name ->
+                    val remaining = total - progress
+                    tvSsidCount.text = "セッション測定中 $progress/$total (残り${remaining}件): $name"
+                },
+                onApStart = { ap ->
+                    adapter.measuringBssid = ap.bssid
+                    val idx = apList.indexOfFirst { it.bssid == ap.bssid }
+                    if (idx > 0) {
+                        apList.add(0, apList.removeAt(idx))
+                    }
+                    adapter.notifyDataSetChanged()
+                },
+                onApFinished = { result ->
+                    val idx = apList.indexOfFirst { it.bssid == result.bssid }
+                    if (idx >= 0) {
+                        apList.removeAt(idx)
+                        apList.add(result)
+                        adapter.notifyDataSetChanged()
+                    }
+                }
+            )
+
+            btnStopMeasurement.visibility = View.GONE
+            adapter.measuringBssid = null
+
+            val measuredByBssid = measuredList.associateBy { it.bssid }
+            val fullList = apList.map { ap -> measuredByBssid[ap.bssid] ?: ap }
+            apList.clear()
+            apList.addAll(fullList)
+            adapter.notifyDataSetChanged()
+
+            withContext(Dispatchers.IO) { saveToPending(measuredList, location, scanId, sid) }
+            updatePendingCount()
+
+            if (switchSendMode.isChecked) trySendAllPending()
+
+            isScanInProgress = false
+            isManualMeasuring = false
+            btnScan.isEnabled = false
+
+            tvSsidCount.text = "測定完了 (${apCount}台)\n次の測定場所に移動してください"
+            layoutMoveButtons.visibility = View.VISIBLE
+            updatePendingCount()
+        }
+    }
+
     private fun hideScanResultsView() {
         tvSsidCount.visibility = View.GONE
         btnToggleList.visibility = View.GONE
         btnStopMeasurement.visibility = View.GONE
         btnMeasureSelected.visibility = View.GONE
         btnSelectAll.visibility = View.GONE
+        layoutMoveButtons.visibility = View.GONE
         recyclerView.visibility = View.GONE
         if (isInSelectionMode) {
             isInSelectionMode = false
@@ -826,7 +868,28 @@ WiFi接続プロセスの状態遷移を記録する機能。
                 }
             }
         } else {
-            // 手動スキャン：AP選択モードに移行
+            // セッション2回目以降：前回選択BSSIDで自動測定
+            if (sessionId != null && selectedBssids.isNotEmpty()) {
+                val targetAps = apList.filter { it.bssid in selectedBssids }
+                isScanInProgress = false
+                isProcessingResults = false
+                if (targetAps.isNotEmpty()) {
+                    startMeasurementCycleAp(targetAps, location, scanId)
+                } else {
+                    tvSsidCount.text = "選択済みBSSIDが検出されませんでした\n次の測定場所に移動してください"
+                    tvSsidCount.visibility = View.VISIBLE
+                    layoutMoveButtons.visibility = View.VISIBLE
+                    tvEmpty.visibility = View.GONE
+                    AlertDialog.Builder(this)
+                        .setTitle("選択済みBSSIDが検出されませんでした")
+                        .setMessage("対象BSSID:\n${selectedBssids.joinToString("\n")}")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+                return
+            }
+
+            // 手動スキャン初回：AP選択モードに移行
             pendingScanId = scanId
             pendingLocation = location
             pendingLabel = label
@@ -918,7 +981,7 @@ WiFi接続プロセスの状態遷移を記録する機能。
                     conn.doOutput = true
                     conn.connectTimeout = 5000
                     conn.readTimeout = 10000
-                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString()) }
+                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/")) }
                     val code = conn.responseCode
                     Log.d("BeaconScan", "response: $code")
                     conn.disconnect()

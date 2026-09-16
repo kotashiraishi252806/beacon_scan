@@ -409,10 +409,10 @@ class SsidMeasurementActivity : AppCompatActivity() {
 同一SSIDを持つ複数のAPはまとめて1件として表示されます。
 
 ━━━━━━━━━━━━━━━━━━
-【接続施行測定（AP）との違い】
+【サプリカント状態取得（AP）との違い】
 ━━━━━━━━━━━━━━━━━━
-接続施行測定（AP）はBSSID（物理AP）ごとにリスト表示します。
-接続施行測定（SSID）はSSID（論理ネットワーク）ごとにリスト表示し、
+サプリカント状態取得（AP）はBSSID（物理AP）ごとにリスト表示します。
+サプリカント状態取得（SSID）はSSID（論理ネットワーク）ごとにリスト表示し、
 同一SSIDの複数APをまとめて測定対象として選択できます。
 内部データ・送信スキーマは同じです。
 
@@ -927,7 +927,7 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
                     conn.doOutput = true
                     conn.connectTimeout = 5000
                     conn.readTimeout = 10000
-                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString()) }
+                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/")) }
                     val code = conn.responseCode
                     Log.d("BeaconScan", "response: $code")
                     conn.disconnect()

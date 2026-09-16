@@ -54,6 +54,11 @@
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <activity
+            android:name=".SecurityMeasurementActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
             android:name=".ThroughputActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
