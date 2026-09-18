@@ -9,7 +9,7 @@
     </string-array>
 
     <string-array name="throughput_server_urls">
-        <item>http://192.168.11.119:8081/test_receive.php</item>
+        <item>http://192.168.11.119:8081/throughput_data_receive.php</item>
         <item>http://10.40.21.231:8081/test_receive.php</item>
         <item>http://wlv.matsuda-lab.jp/test_receive.php</item>
         <item>http://192.168.11.56:8081/test_receive.php</item>
