@@ -166,7 +166,7 @@ class SupplicantMeasurer(
             }
         }
 
-        // 単一待機：最大15秒
+        // 単一待機：最大10秒
         // onAvailable / onUnavailable / terminal state のいずれかで早期終了
         // continuation設定後にrequestNetworkを呼ぶことでonUnavailableとのレース条件を回避
         withTimeoutOrNull(DIALOG_TIMEOUT_MS) {
