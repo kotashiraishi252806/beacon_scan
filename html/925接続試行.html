@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>925 接続試行の定義に関する議論まとめ</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 2em auto; line-height: 1.7; color: #222; }
+    h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+    h2 { border-left: 4px solid #555; padding-left: 0.6em; margin-top: 2em; }
+    h3 { margin-top: 1.5em; }
+    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    th, td { border: 1px solid #aaa; padding: 0.5em 0.8em; text-align: left; }
+    th { background: #eee; }
+    code { background: #f4f4f4; padding: 0.1em 0.4em; border-radius: 3px; font-size: 0.95em; }
+    pre { background: #f4f4f4; padding: 1em; border-radius: 4px; overflow-x: auto; }
+    .conclusion { background: #e8f4e8; border: 1px solid #6a6; padding: 1em; border-radius: 4px; margin: 1em 0; }
+    .note { background: #fff8e1; border: 1px solid #cc9; padding: 1em; border-radius: 4px; margin: 1em 0; }
+  </style>
+</head>
+<body>
+
+<h1>接続試行の定義に関する議論まとめ（2026-09-25）</h1>
+
+<p>このドキュメントは、測定Androidアプリにおける「接続試行」の定義を確立するために行った議論の記録です。
+サーバサイドの分析Webアプリ開発への引き継ぎ資料として作成しています。</p>
+
+<h2>1. 議論の目的</h2>
+<ul>
+  <li>論文において接続試行の詳細を正確に記述すること</li>
+  <li>データ集計時の分類基準（接続試行件数など）を明確にすること</li>
+  <li><strong>ゴール：接続試行を定義し、接続試行回数をカウントできるようにすること</strong></li>
+</ul>
+
+<h2>2. アプリの現状確認</h2>
+
+<h3>2-1. アプリの接続試行処理の概要</h3>
+<p>アプリはWiFiスキャンで検出した各APに対して順次 <code>measureForAp()</code> を呼び出す（<code>SupplicantMeasurer.kt</code>）。</p>
+<pre>measureAll() → AP1件ごとに measureForAp() を呼び出す
+  → connectivityManager.requestNetwork() を1回呼び出す
+  → SUPPLICANT_STATE_CHANGED_ACTION を受信し、遷移状態を supplicantTransitions に記録
+  → supplicantFinalState に結果を格納して返す</pre>
+
+<h3>2-2. 現状の課題</h3>
+<ul>
+  <li>接続試行回数を格納する変数が存在しない</li>
+  <li>「接続試行」の定義がコード上で明示されていない</li>
+  <li><code>SKIPPED</code>・<code>CANCELLED</code> は <code>requestNetwork()</code> を呼ばないが、結果リスト上は他の試行結果と同列に並ぶ</li>
+</ul>
+
+<h2>3. 接続試行の定義の検討</h2>
+
+<h3>3-1. 候補① requestNetwork() 呼び出し</h3>
+<p><code>ConnectivityManager.requestNetwork()</code> はOSへの接続要求の発行であり、端末からAPへの接続が始まったわけではない。厳密には「接続試行」の開始点として不適切。</p>
+
+<h3>3-2. IEEE 802.11 接続シーケンス</h3>
+<table>
+  <tr><th>順序</th><th>フェーズ</th><th>内容</th></tr>
+  <tr><td>1</td><td>スキャン</td><td>Probe Request/Response によるAP探索（Active）またはビーコン受信（Passive）</td></tr>
+  <tr><td>2</td><td>認証（Authentication）</td><td>Authentication Request/Response の交換</td></tr>
+  <tr><td>3</td><td>関連付け（Association）</td><td>Association Request/Response の交換</td></tr>
+  <tr><td>4</td><td>鍵交換（Key Exchange）</td><td>WPA2/WPA3 の場合、4-Way Handshake</td></tr>
+  <tr><td>5</td><td>接続完了</td><td>データ通信が可能な状態</td></tr>
+</table>
+
+<h3>3-3. Active/Passive スキャンと接続試行の関係</h3>
+<ul>
+  <li><strong>Active スキャン</strong>：Probe Request を全AP宛に送信してAP探索を行う</li>
+  <li><strong>Passive スキャン</strong>：ビーコンを受信してAP探索を行う</li>
+  <li>Probe Request は探索目的で不特定多数のAP宛に送るため、特定APへの接続意図を持たない → <strong>接続試行ではない</strong></li>
+  <li>このアプリは <code>WifiManager.startScan()</code> を使用するが、Active/Passive のどちらが使われるかはOS・ドライバ・電波法規制ドメインによって決定され、アプリからは制御も観測も不可能</li>
+</ul>
+
+<h3>3-4. 採択した定義</h3>
+<div class="conclusion">
+  <strong>接続試行1回の定義：特定のAPに対してAuthentication Requestフレームを送信した1回</strong><br><br>
+  <strong>採択理由：</strong>
+  <ul>
+    <li>Authentication Request は特定のAPを宛先として送信する最初のフレームであり、接続意図が明確</li>
+    <li>Active/Passive 問わず、特定APへの接続シーケンスは必ずAuthenticationフェーズから始まる（IEEE 802.11規格上）</li>
+    <li>Probe Request と異なり、不特定多数宛ではなく特定AP宛である</li>
+  </ul>
+</div>
+
+<h2>4. 実装方針</h2>
+
+<h3>4-1. Authentication Request フレームの直接カウントは不可能</h3>
+<p>Authentication Request フレームはレイヤー2（802.11 MACフレーム）であり、通常のAndroidアプリからは直接観測できない。パケットキャプチャにはroot権限または特殊な権限が必要。</p>
+
+<h3>4-2. 近似手段：SupplicantState.AUTHENTICATING 遷移のカウント</h3>
+<p>アプリは <code>SUPPLICANT_STATE_CHANGED_ACTION</code> をすでに受信しており、<code>supplicantTransitions</code> に全状態遷移を記録済み（<code>SupplicantMeasurer.kt:68</code>）。</p>
+<pre>supplicantTransitions.add(state.name)</pre>
+<p><code>supplicantTransitions</code> 中の <code>"AUTHENTICATING"</code> の出現回数が、接続試行回数の近似値となる。</p>
+
+<div class="note">
+  <strong>注意：</strong> <code>SupplicantState.AUTHENTICATING</code> は wpa_supplicant の内部状態であり、Authentication Request フレームの送信と1対1で対応することは Android API ドキュメント上で保証されていない。論文上は「近似値」として明示する必要がある。
+</div>
+
+<h3>4-3. カウントの実施場所：サーバサイド</h3>
+<p>アプリへの余計な計算リソース消費を避けるため、カウントはサーバサイドで行う方針とした。</p>
+<p>アプリはすでに <code>supplicant_states</code>（全遷移リスト）をAP単位でサーバに送信している。サーバサイドでそのリスト中の <code>"AUTHENTICATING"</code> の出現回数を数えることで実現可能。<strong>アプリ側の変更は不要。</strong></p>
+
+<h2>5. サーバサイドへの要件</h2>
+
+<h3>5-1. 既存JSONスキーマの該当フィールド</h3>
+<pre>{
+  "access_points": [
+    {
+      "supplicant_states": ["SCANNING", "AUTHENTICATING", "ASSOCIATING", ...],  ← このフィールドを使用
+      "supplicant_final_state": "COMPLETED" | "FAILED_AT_*" | "TIMEOUT_AT_*" | ...
+    }
+  ]
+}</pre>
+
+<h3>5-2. 集計方法</h3>
+<table>
+  <tr><th>集計単位</th><th>算出方法</th><th>格納場所の提案</th></tr>
+  <tr><td>AP単位の接続試行回数</td><td>各APの <code>supplicant_states</code> 中の <code>"AUTHENTICATING"</code> の出現回数</td><td>AP単位レコード（下位層）</td></tr>
+  <tr><td>スキャンセッション単位の合計接続試行回数</td><td>スキャン内全APの上記値の総和</td><td>スキャンエントリのメタ情報（上位層）</td></tr>
+</table>
+
+<h3>5-3. supplicant_final_state の値一覧（参考）</h3>
+<table>
+  <tr><th>値</th><th>意味</th></tr>
+  <tr><td><code>COMPLETED</code></td><td>接続成功</td></tr>
+  <tr><td><code>FAILED_AT_&lt;STATE&gt;</code></td><td>該当状態で失敗（例：FAILED_AT_DISCONNECTED）</td></tr>
+  <tr><td><code>TIMEOUT_AT_&lt;STATE&gt;</code></td><td>該当状態でタイムアウト（最大10秒）</td></tr>
+  <tr><td><code>NOT_FOUND</code></td><td>APが見つからなかった（onUnavailable かつ遷移なし）</td></tr>
+  <tr><td><code>SKIPPED</code></td><td>WEP APのためスキップ（接続試行なし）</td></tr>
+  <tr><td><code>CANCELLED</code></td><td>停止ボタンによるキャンセル（接続試行なし）</td></tr>
+</table>
+
+</body>
+</html>

@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>無線LAN測定アプリの仕組み</title>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default' });
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Hiragino Sans', 'Meiryo', 'Segoe UI', sans-serif;
+      background: #e8ecf2;
+      overflow: hidden;
+    }
+
+    #deck { width: 100vw; height: 100vh; position: relative; }
+
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      padding: 52px 80px 58px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease;
+      background: #f7f9fc;
+      color: #1a1e2e;
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide.cover   { background: #ffffff; color: #1a1e2e; }
+    .slide.section { background: #10294f; color: #eef2ff; }
+
+    .label {
+      font-size: 12px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: #1d57b0; margin-bottom: 10px;
+    }
+    .cover .label  { color: #1d57b0; }
+    .section .label { color: #7eb8ff; }
+
+    h2 {
+      font-size: 34px; font-weight: 900; color: #0d1f45;
+      line-height: 1.25; margin-bottom: 10px;
+    }
+    .cover h2   { color: #0d1f45; font-size: 40px; }
+    .section h2 { color: #eef2ff; font-size: 36px; }
+
+    .lead {
+      font-size: 16px; color: #445; line-height: 1.75;
+      margin-bottom: 28px; max-width: 800px;
+    }
+    .cover .lead   { color: #445; }
+    .section .lead { color: rgba(255,255,255,0.65); }
+
+    .rule { border: none; border-top: 2px solid #dde3ee; margin: 0 0 24px; }
+
+    /* カード */
+    .card {
+      background: white; border: 1px solid #dde3ee;
+      border-radius: 10px; padding: 18px 22px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 12px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: #1d57b0; margin-bottom: 6px;
+    }
+    .card-body { font-size: 15px; color: #223; line-height: 1.75; }
+
+    /* ハイライトボックス */
+    .hbox {
+      border-left: 5px solid #1d57b0;
+      background: #eef4ff; border-radius: 0 8px 8px 0;
+      padding: 14px 18px; margin-bottom: 14px;
+      font-size: 15px; color: #1a2040; line-height: 1.75;
+    }
+    .hbox.green  { border-color: #237038; background: #eef7f0; color: #1a3020; }
+    .hbox.orange { border-color: #b86020; background: #fdf3ea; color: #3a1a00; }
+    .hbox.red    { border-color: #b03030; background: #fdf0f0; color: #3a0a0a; }
+    .hbox.gray   { border-color: #889; background: #f2f3f6; color: #334; }
+    .hbox.teal   { border-color: #0e808e; background: #eaf6f7; color: #0a3035; }
+
+    /* テーブル */
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th {
+      background: #1d57b0; color: white;
+      padding: 10px 16px; text-align: left;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    }
+    td {
+      padding: 10px 16px; color: #223;
+      border-bottom: 1px solid #e4e8f0; vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #fafbfd; }
+
+    /* バッジ */
+    .badge {
+      display: inline-block; padding: 3px 12px;
+      border-radius: 20px; font-size: 12px; font-weight: 700;
+    }
+    .b-blue   { background: #1d57b0; color: white; }
+    .b-teal   { background: #0e808e; color: white; }
+    .b-green  { background: #237038; color: white; }
+    .b-red    { background: #b03030; color: white; }
+    .b-orange { background: #b86020; color: white; }
+    .b-gray   { background: #667; color: white; }
+    .b-purple { background: #553366; color: white; }
+
+    /* 最終状態ラベル */
+    .fs {
+      font-family: 'Courier New', monospace; font-size: 12px;
+      padding: 3px 8px; border-radius: 4px; font-weight: 700;
+    }
+    .fs-ok     { background: #d4edda; color: #155724; }
+    .fs-skip   { background: #e2e3f3; color: #383888; }
+    .fs-none   { background: #e9ecef; color: #495057; }
+    .fs-fail   { background: #f8d7da; color: #721c24; }
+    .fs-tout   { background: #fff3cd; color: #856404; }
+    .fs-cancel { background: #ede0f5; color: #553366; }
+
+    /* インラインコード */
+    code {
+      font-family: 'Courier New', monospace; font-size: 12px;
+      background: #eef; color: #1d57b0;
+      padding: 1px 6px; border-radius: 4px;
+    }
+
+    /* 矢印フロー */
+    .flow {
+      display: flex; align-items: center; gap: 0;
+      margin: 16px 0;
+    }
+    .flow-step {
+      flex: 1; text-align: center;
+      background: white; border: 2px solid #1d57b0;
+      border-radius: 8px; padding: 12px 8px;
+      font-size: 14px; font-weight: 700; color: #0d1f45; line-height: 1.4;
+    }
+    .flow-arrow {
+      font-size: 22px; color: #1d57b0; padding: 0 6px; flex-shrink: 0;
+    }
+    .flow-step.active-step {
+      background: #1d57b0; color: white; border-color: #1d57b0;
+    }
+
+    /* 2カラム */
+    .cols { display: flex; gap: 20px; }
+    .cols > * { flex: 1; }
+
+    /* ナビゲーション */
+    #nav {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 16px;
+      background: rgba(13,31,69,0.85); backdrop-filter: blur(8px);
+      border-radius: 40px; padding: 10px 22px;
+    }
+    #nav button {
+      background: none; border: 1px solid rgba(255,255,255,0.35);
+      color: white; padding: 6px 18px; border-radius: 20px;
+      cursor: pointer; font-size: 13px; transition: all 0.2s;
+    }
+    #nav button:hover { background: rgba(255,255,255,0.15); }
+    #nav button:disabled { opacity: 0.25; cursor: default; }
+    #slide-counter { font-size: 12px; color: rgba(255,255,255,0.65); min-width: 54px; text-align: center; }
+
+    #progress {
+      position: fixed; top: 0; left: 0; height: 4px;
+      background: linear-gradient(90deg, #1d57b0, #4a9eff);
+      transition: width 0.3s ease; z-index: 100;
+    }
+    #hint {
+      position: fixed; top: 14px; right: 18px;
+      font-size: 11px; color: #aab; letter-spacing: 0.5px;
+    }
+
+    .flex1 { flex: 1; }
+    .mt8  { margin-top:  8px; }
+    .mt12 { margin-top: 12px; }
+    .mt16 { margin-top: 16px; }
+    .mt20 { margin-top: 20px; }
+
+    /* 番号付きリスト風 */
+    .num-list { list-style: none; }
+    .num-list li {
+      display: flex; gap: 14px; align-items: flex-start;
+      margin-bottom: 12px; font-size: 15px; color: #223; line-height: 1.7;
+    }
+    .num-list li .num {
+      flex-shrink: 0; width: 26px; height: 26px;
+      border-radius: 50%; background: #1d57b0; color: white;
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* 925データ構造_縦 スライド用（.data-struct スコープ） */
+    .data-struct .layout { display: flex; flex-direction: column; gap: 20px; }
+    .data-struct .card { background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); overflow: hidden; margin-bottom: 0; padding: 0; border: none; }
+    .data-struct .card-header { padding: 8px 16px; font-size: 11px; font-weight: bold; letter-spacing: 0.6px; color: white; }
+    .data-struct .card-body { padding: 16px; font-size: 15px; }
+    .data-struct .h-scan    { background: #2d5fa8; }
+    .data-struct .h-ap      { background: #2a7e6c; }
+    .data-struct .h-supp    { background: #8a4800; }
+    .data-struct .h-legend  { background: #555; }
+    .data-struct .h-flow    { background: #4a3080; }
+    .data-struct .h-simple    { background: #556070; }
+    .data-struct .h-conn-ap   { background: #2d5fa8; }
+    .data-struct .h-conn-ssid { background: #1a7060; }
+    .data-struct .h-conn-sec  { background: #6a3070; }
+    .data-struct .field-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .data-struct .field-table th { background: #f3f5f8; text-align: left; padding: 5px 8px; font-size: 10px; color: #556; border-bottom: 1px solid #e0e4ea; }
+    .data-struct .field-table td { padding: 5px 8px; border-bottom: 1px solid #eef0f4; vertical-align: top; line-height: 1.5; background: none; }
+    .data-struct .field-table tr:last-child td { border-bottom: none; }
+    .data-struct .field-name { font-family: 'Courier New', monospace; font-size: 11px; color: #1a4a90; white-space: nowrap; }
+    .data-struct .field-type { font-family: 'Courier New', monospace; font-size: 10px; color: #888; white-space: nowrap; }
+    .data-struct .field-desc { color: #445; font-size: 11.5px; }
+    .data-struct .badge-nullable { display: inline-block; background: #fce8d0; color: #c05000; font-size: 9px; font-weight: bold; padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+    .data-struct .badge-always   { display: inline-block; background: #d8ede5; color: #1a6040; font-size: 9px; font-weight: bold; padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+    .data-struct .badge-api      { display: inline-block; background: #e8e0f4; color: #5a2090; font-size: 9px; font-weight: bold; padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+    .data-struct .nest { border: 2px solid #2d5fa8; border-radius: 8px; padding: 12px 14px; position: relative; background: #f7f9fd; }
+    .data-struct .nest-label { position: absolute; top: -10px; left: 12px; background: #2d5fa8; color: white; font-size: 10px; font-weight: bold; padding: 1px 8px; border-radius: 4px; font-family: 'Courier New', monospace; }
+    .data-struct .nest-inner { border: 2px solid #2a7e6c; border-radius: 6px; padding: 10px 12px; margin-top: 10px; position: relative; background: #f4faf8; }
+    .data-struct .nest-inner-label { position: absolute; top: -9px; left: 10px; background: #2a7e6c; color: white; font-size: 10px; font-weight: bold; padding: 1px 7px; border-radius: 4px; font-family: 'Courier New', monospace; }
+    .data-struct .nest-supp { border: 2px solid #8a4800; border-radius: 6px; padding: 10px 12px; margin-top: 8px; position: relative; background: #fdf7f0; }
+    .data-struct .nest-supp-label { position: absolute; top: -9px; left: 10px; background: #8a4800; color: white; font-size: 10px; font-weight: bold; padding: 1px 7px; border-radius: 4px; font-family: 'Courier New', monospace; }
+    .data-struct .field-row { font-family: 'Courier New', monospace; font-size: 11px; padding: 2px 0; color: #334; }
+    .data-struct .key      { color: #1a4a90; }
+    .data-struct .val-s    { color: #1a6a30; }
+    .data-struct .val-n    { color: #a05000; }
+    .data-struct .val-null { color: #999; font-style: italic; }
+    .data-struct .val-arr  { color: #888; }
+    .data-struct .comment  { color: #aaa; font-size: 10px; font-style: italic; margin-left: 6px; }
+    .data-struct .legend-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    .data-struct .legend-table td { padding: 5px 8px; border-bottom: 1px solid #eef0f4; vertical-align: top; background: none; }
+    .data-struct .legend-table tr:last-child td { border-bottom: none; }
+    .data-struct .state-code { font-family: 'Courier New', monospace; font-size: 11px; white-space: nowrap; font-weight: bold; }
+    .data-struct .s-completed { color: #1a7a40; }
+    .data-struct .s-failed    { color: #c03030; }
+    .data-struct .s-timeout   { color: #c07000; }
+    .data-struct .s-notfound  { color: #888; }
+    .data-struct .s-skipped   { color: #5a5a5a; }
+    .data-struct .s-cancelled { color: #9030a0; }
+    .data-struct .flow { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+    .data-struct .flow-step { display: flex; align-items: flex-start; gap: 10px; background: #f5f4fb; border-left: 4px solid #6a50c0; border-radius: 0 6px 6px 0; padding: 7px 10px; font-size: 11.5px; border-top: none; border-right: none; border-bottom: none; }
+    .data-struct .step-num { font-size: 11px; font-weight: bold; color: #6a50c0; min-width: 20px; }
+    .data-struct .flow-arrow { text-align: center; color: #aaa; font-size: 14px; line-height: 1; padding: 0; font-size: 14px; }
+    .data-struct .json-block { background: #1e2230; color: #cdd5e0; border-radius: 8px; padding: 14px 16px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.7; overflow-x: auto; white-space: pre; }
+    .data-struct .jk   { color: #7ec8e3; }
+    .data-struct .js   { color: #a8e6a0; }
+    .data-struct .jn   { color: #f0b060; }
+    .data-struct .jnull { color: #888; font-style: italic; }
+    .data-struct .jc   { color: #666; font-style: italic; }
+
+    /* 925サプリカント取得フロー用 */
+    .hrow { display: flex; width: 1210px; }
+    .gl {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: bold; text-transform: uppercase;
+      letter-spacing: 0.8px; color: white; height: 20px;
+      border-right: 1px solid rgba(255,255,255,0.25); flex-shrink: 0;
+    }
+    .gl:last-child { border-right: none; }
+    .g-user   { background: #553366; }
+    .g-device { background: #8aa4c0; }
+    .g-app    { background: #5577cc; }
+    .g-ma     { background: #3a70b0; }
+    .g-sm     { background: #b07030; }
+    .g-os     { background: #5890d0; }
+    .g-fw     { background: #3668b8; }
+    .g-lx     { background: #b86820; }
+    .g-ext    { background: #2a8040; }
+    .prow { display: flex; width: 1210px; }
+    .p {
+      width: 110px; padding: 4px 2px; text-align: center;
+      font-size: 9.5px; font-weight: bold;
+      font-family: 'Courier New', monospace; color: white; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; line-height: 1.3;
+      border-right: 1px solid rgba(255,255,255,0.2); flex-shrink: 0;
+    }
+    .p:last-child { border-right: none; }
+    .p-user    { background: #553366; }
+    .p-scan    { background: #1d57b0; }
+    .p-sec     { background: #0e808e; }
+    .p-measure { background: #b07030; }
+    .p-cb      { background: #9a6020; }
+    .p-suprec  { background: #886020; }
+    .p-cm      { background: #1d57b0; }
+    .p-wm      { background: #0e808e; }
+    .p-wpa     { background: #b86020; }
+    .p-driver  { background: #7a5c48; }
+    .p-ap      { background: #237038; }
+  </style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="hint">← → でスライド移動</div>
+<div id="deck">
+
+<!-- ══════════════════════════
+     S1 タイトル
+══════════════════════════ -->
+<div class="slide cover active">
+  <div style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+    <div class="label">Research Application</div>
+    <h2>屋外無線LAN環境の<br>測定アプリ</h2>
+    <p class="lead">
+      10/6まで開発を進めてきたアプリの説明する内容です
+    </p>
+    <div style="font-size:13px; color:rgba(0,0,0,0.4); line-height:2.2;">
+      実装言語：Kotlin　対象 OS：Android（API 30 以上）<br>
+      動作確認端末：Motorola moto g31(w) 他
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S2 研究背景
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">背景</div>
+  <h2>なぜこのアプリが必要なのか</h2>
+  <hr class="rule">
+
+  <div>
+    <div class="hbox orange">
+      <strong>課題</strong><br>
+      屋外でも利用可能、実測値を収集可能、長期的な測定を想定、可視化を想定している無線LAN環境システムが少ないため開発
+    </div>
+    <div class="hbox green mt12">
+      <strong>目的</strong><br>
+      できるだけ無線LAN環境の指標を収集し、把握に役立てる
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S3 先行研究の考察
+══════════════════════════ -->
+<div class="slide" style="overflow-y: auto;">
+  <div class="label">先行研究の考察</div>
+  <h2>先行研究の調査と本研究のアプローチ</h2>
+  <hr class="rule">
+
+  <div class="flow">
+    <div class="flow-step">無線LAN環境を<br>把握するには<br>測定が必要</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">測定する指標の<br>検討が必要</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step active-step">サプリカントを提案<br>取得機能を実装</div>
+  </div>
+
+  <div class="mt12">
+    <div class="hbox" style="font-size:14px;">
+      <strong>事実：</strong>
+      先行研究のサプリカント取得（<code>wifiManager.connectionInfo.supplicantState</code>）は
+      接続中の 1 台のみを対象とする。同一 SSID が複数の AP に設定されている環境では、
+      全 AP を測定できない。
+    </div>
+    <div class="hbox orange mt12" style="font-size:14px;">
+      <strong>考察：</strong>
+      同一 SSID が設定されている各 AP を網羅的に測定できたほうが、
+      その無線LAN環境をより有意義に把握できる。
+      全 AP を測定するには、アプリ側から能動的に<strong style="color:#b03030;">接続試行</strong>を行う手段が必要。
+    </div>
+    <div class="hbox green mt12" style="font-size:14px;">
+      <strong>提案：</strong>
+      <code>WifiNetworkSpecifier</code> + <code>requestNetwork()</code> を用いて、
+      スキャンで検出した全 AP に対して順番に接続試行を行い、
+      サプリカント状態遷移を記録する。
+      また、全 AP 対応のデータ構造を新たに定義し、スキャン結果を JSON 形式でサーバーへ送信する。
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S4 接続試行の定義
+══════════════════════════ -->
+<div class="slide" style="overflow-y: auto;">
+  <div class="label">接続試行の定義</div>
+  <h2>「接続試行」とは何か</h2>
+  <hr class="rule">
+
+  <div class="hbox green" style="font-size:14px;">
+    <strong>採択した定義：</strong>
+    特定の AP を指定して <code>ConnectivityManager.requestNetwork()</code> を呼び出すこと。
+  </div>
+
+  <div class="mt12" style="font-size:12px; background:#f7f9fc; border:1px solid #dde3ee; border-radius:8px; padding:14px 20px;">
+    <div style="display:flex; flex-direction:column; max-width:520px; margin:0 auto; width:100%;">
+
+      <!-- Header -->
+      <div style="display:flex; align-items:center; margin-bottom:4px;">
+        <div style="width:52px; flex-shrink:0; text-align:center; background:#1d57b0; color:#fff; border-radius:4px; padding:3px 0; font-weight:700;">STA</div>
+        <div style="width:200px; flex-shrink:0;"></div>
+        <div style="width:52px; flex-shrink:0; text-align:center; background:#1d57b0; color:#fff; border-radius:4px; padding:3px 0; font-weight:700;">AP</div>
+        <div style="flex:1;"></div>
+      </div>
+
+      <!-- ① ビーコン: AP → STA -->
+      <div style="display:flex; align-items:stretch;">
+        <div style="width:52px; flex-shrink:0; border-right:2px solid #c0cce0;"></div>
+        <div style="width:200px; flex-shrink:0; padding:4px 6px; display:flex; flex-direction:column; justify-content:center; gap:2px;">
+          <div style="text-align:center; color:#556; font-weight:600; font-size:11px;">① ビーコン</div>
+          <div style="display:flex; align-items:center;">
+            <span style="color:#778;">◄</span>
+            <div style="flex:1; border-top:1px dashed #99a;"></div>
+          </div>
+        </div>
+        <div style="width:52px; flex-shrink:0; border-left:2px solid #c0cce0;"></div>
+        <div style="flex:1; padding-left:12px; display:flex; align-items:center; font-size:11px; color:#778;">AP が定期送信</div>
+      </div>
+
+      <!-- ② プローブ: STA → AP / AP → STA -->
+      <div style="display:flex; align-items:stretch;">
+        <div style="width:52px; flex-shrink:0; border-right:2px solid #c0cce0;"></div>
+        <div style="width:200px; flex-shrink:0; padding:4px 6px; display:flex; flex-direction:column; justify-content:center; gap:2px;">
+          <div style="text-align:center; color:#556; font-weight:600; font-size:11px;">② プローブ</div>
+          <div style="display:flex; align-items:center;">
+            <div style="flex:1; border-top:1px solid #99a;"></div>
+            <span style="color:#778;">►</span>
+          </div>
+          <div style="display:flex; align-items:center;">
+            <span style="color:#778;">◄</span>
+            <div style="flex:1; border-top:1px solid #99a;"></div>
+          </div>
+        </div>
+        <div style="width:52px; flex-shrink:0; border-left:2px solid #c0cce0;"></div>
+        <div style="flex:1; padding-left:12px; display:flex; align-items:center; font-size:11px; color:#778;">AP 探索</div>
+      </div>
+
+      <!-- ③ 認証: STA → AP / AP → STA -->
+      <div style="display:flex; align-items:stretch;">
+        <div style="width:52px; flex-shrink:0; border-right:2px solid #c0cce0;"></div>
+        <div style="width:200px; flex-shrink:0; padding:4px 6px; display:flex; flex-direction:column; justify-content:center; gap:2px;">
+          <div style="text-align:center; color:#556; font-weight:600; font-size:11px;">③ 認証（Authentication）</div>
+          <div style="display:flex; align-items:center;">
+            <div style="flex:1; border-top:1px solid #99a;"></div>
+            <span style="color:#778;">►</span>
+          </div>
+          <div style="display:flex; align-items:center;">
+            <span style="color:#778;">◄</span>
+            <div style="flex:1; border-top:1px solid #99a;"></div>
+          </div>
+        </div>
+        <div style="width:52px; flex-shrink:0; border-left:2px solid #c0cce0;"></div>
+        <div style="flex:1; padding-left:12px; display:flex; align-items:center; font-size:11px; color:#778;"></div>
+      </div>
+
+      <!-- ④ アソシエーション: STA → AP / AP → STA -->
+      <div style="display:flex; align-items:stretch;">
+        <div style="width:52px; flex-shrink:0; border-right:2px solid #c0cce0;"></div>
+        <div style="width:200px; flex-shrink:0; padding:4px 6px; display:flex; flex-direction:column; justify-content:center; gap:2px;">
+          <div style="text-align:center; color:#556; font-weight:600; font-size:11px;">④ アソシエーション</div>
+          <div style="display:flex; align-items:center;">
+            <div style="flex:1; border-top:1px solid #99a;"></div>
+            <span style="color:#778;">►</span>
+          </div>
+          <div style="display:flex; align-items:center;">
+            <span style="color:#778;">◄</span>
+            <div style="flex:1; border-top:1px solid #99a;"></div>
+          </div>
+        </div>
+        <div style="width:52px; flex-shrink:0; border-left:2px solid #c0cce0;"></div>
+        <div style="flex:1; padding-left:12px; display:flex; align-items:center; font-size:11px; color:#778;">関連付け</div>
+      </div>
+
+      <!-- ⑤ データ通信 -->
+      <div style="display:flex; align-items:stretch;">
+        <div style="width:52px; flex-shrink:0; border-right:2px solid #c0cce0;"></div>
+        <div style="width:200px; flex-shrink:0; padding:4px 6px; display:flex; flex-direction:column; justify-content:center; gap:2px;">
+          <div style="text-align:center; color:#237038; font-weight:600; font-size:11px;">⑤ データ通信</div>
+          <div style="display:flex; align-items:center;">
+            <span style="color:#237038;">◄</span>
+            <div style="flex:1; border-top:2px solid #237038;"></div>
+            <span style="color:#237038;">►</span>
+          </div>
+        </div>
+        <div style="width:52px; flex-shrink:0; border-left:2px solid #c0cce0;"></div>
+        <div style="flex:1; padding-left:12px; display:flex; align-items:center; font-size:11px; color:#237038; font-weight:600;">データリンク層接続完了</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="hbox gray mt12" style="font-size:13px;">
+    <strong>補足：</strong>
+    採択した定義の <code>ConnectivityManager.requestNetwork()</code> は、
+    アプリが Android OS に対して「この AP への接続を開始してほしい」と依頼する API コールである。
+    上記の図を行うために、OS に指示を出すメソッド。
+    アプリからは <code>requestNetwork()</code> 呼び出し後に OS が実際にどのフレーム交換を行ったかを直接観測することはできない。
+    そのため、実装上の接続試行を <code>requestNetwork()</code> の呼び出しと定義している。
+  </div>
+
+</div>
+
+<!-- ══════════════════════════
+     S5 アプリ概要
+══════════════════════════ -->
+<div class="slide" style="overflow-y: auto;">
+  <div class="label">アプリ概要</div>
+  <h2>アプリの動作フロー</h2>
+  <hr class="rule">
+
+  <div style="background:white; border-radius:10px; border:1px solid #dde3ee; padding:20px 32px; overflow-x:auto;">
+    <pre class="mermaid">
+%%{init: {'themeVariables': {'noteBkgColor': '#ddeeff', 'noteBorderColor': '#99bbdd', 'noteTextColor': '#223344'}}}%%
+sequenceDiagram
+    participant U as ユーザ
+    participant S as スマートフォン
+    participant AP as AP（無線LAN機器）
+    participant SV as 分析サーバ
+
+    rect rgb(238, 243, 251)
+        Note over U,SV: ① WiFiスキャン — 周辺の AP を探す
+        U->>S: 「スキャン」ボタンをタップ
+        S-->>S: 位置情報を取得（getCurrentLocation / GPS優先）
+        S-->>AP: Probe Request(broadcast)<br/>宛先MACアドレス(FF:FF:FF:FF:FF:FF)
+        AP-->>S: Probe Response
+        S->>S: AP 一覧を画面に表示
+    end
+
+    rect rgb(238, 243, 251)
+        Note over U,SV: ② 測定する AP を選んで開始
+        U->>S: AP を選んで「測定開始」をタップ
+    end
+
+    rect rgb(238, 243, 251)
+        Note over U,SV: ③ 接続試行・状態記録（選んだ AP に 1 台ずつ繰り返す）
+        loop AP ごとに繰り返す
+            S-->>AP: 接続を試みる
+            AP-->>S: 応答
+            S-->>S: 接続がどこまで進んだかを記録
+        end
+        Note right of S: 記録例（成功）：切断中→認証中→接続確立
+        Note right of S: 記録例（失敗）：切断中→認証中→認証失敗
+        Note right of S: APの種類（Open・WPA2・WPA3）で異なる
+    end
+
+    rect rgb(238, 243, 251)
+        Note over U,SV: ④ 測定結果をサーバへ送信
+        S-->>SV: 全 AP の測定データを送信
+    end
+    </pre>
+  </div>
+
+  <div style="margin-top:12px; background:white; border-radius:8px; border:1px solid #dde3ee; padding:10px 20px; font-size:11px; color:#445; display:flex; gap:24px; align-items:center; flex-wrap:wrap;">
+    <strong style="font-size:11px; color:#334;">凡例</strong>
+    <div style="display:flex; align-items:center; gap:7px;">
+      <svg width="52" height="14"><line x1="2" y1="7" x2="40" y2="7" stroke="#333" stroke-width="2"/><polygon points="40,3 52,7 40,11" fill="#333"/></svg>
+      実線：ユーザが直接体験できること（ボタン操作・画面表示）
+    </div>
+    <div style="display:flex; align-items:center; gap:7px;">
+      <svg width="52" height="14"><line x1="2" y1="7" x2="40" y2="7" stroke="#888" stroke-width="1.5" stroke-dasharray="5,3"/><polygon points="40,3 52,7 40,11" fill="#888"/></svg>
+      破線：目に見えない処理（通信・電波・内部記録）
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S6 サプリカント取得フロー
+══════════════════════════ -->
+<div class="slide" style="overflow: auto;">
+  <div class="label">サプリカント取得フロー</div>
+  <h2>WiFi Supplicant 測定シーケンス図</h2>
+  <p class="lead" style="font-size:13px; margin-bottom:10px;">
+    上部ラベルで包含階層を示す。矢印は時系列順（上→下）。紫の矢印はユーザ操作。<br>
+    ① スキャン+セキュリティ分類フェーズ → ② Supplicant 測定フェーズ。
+  </p>
+  <hr class="rule">
+
+  <div style="overflow-x:auto;">
+    <div style="background:white; border-radius:10px; border:1px solid #dde3ee; overflow:hidden; display:inline-block;">
+
+      <div class="hrow">
+        <div class="gl g-user"   style="width:110px;">外部（操作者）</div>
+        <div class="gl g-device" style="width:990px;">Android デバイス</div>
+        <div class="gl g-ext"    style="width:110px;">外部</div>
+      </div>
+      <div class="hrow">
+        <div class="gl g-user" style="width:110px;"></div>
+        <div class="gl g-app"  style="width:550px;">アプリ</div>
+        <div class="gl g-os"   style="width:440px;">Android OS</div>
+        <div class="gl g-ext"  style="width:110px;"></div>
+      </div>
+      <div class="hrow">
+        <div class="gl g-user" style="width:110px;"></div>
+        <div class="gl g-ma"   style="width:220px;">MainActivity.kt</div>
+        <div class="gl g-sm"   style="width:330px;">SupplicantMeasurer.kt</div>
+        <div class="gl g-fw"   style="width:220px;">Android Framework</div>
+        <div class="gl g-lx"   style="width:220px;">Linux</div>
+        <div class="gl g-ext"  style="width:110px;"></div>
+      </div>
+      <div class="prow">
+        <div class="p p-user">ユーザ</div>
+        <div class="p p-scan">onScan<br>ResultsReady()</div>
+        <div class="p p-sec">get<br>Security()</div>
+        <div class="p p-measure">measure<br>ForAp()</div>
+        <div class="p p-cb">cb</div>
+        <div class="p p-suprec">supplicant<br>Receiver</div>
+        <div class="p p-cm">Connectivity<br>Manager</div>
+        <div class="p p-wm">WifiManager<br>/ WifiSvc</div>
+        <div class="p p-wpa">wpa_<br>supplicant</div>
+        <div class="p p-driver">WiFi<br>ドライバ</div>
+        <div class="p p-ap">AP</div>
+      </div>
+
+      <svg width="1210" height="730" style="display:block;">
+        <line x1="55"   y1="0" x2="55"   y2="708" stroke="#553366" stroke-width="1" stroke-dasharray="5,4" opacity="0.25"/>
+        <line x1="165"  y1="0" x2="165"  y2="708" stroke="#1d57b0" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="275"  y1="0" x2="275"  y2="708" stroke="#0e808e" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="385"  y1="0" x2="385"  y2="708" stroke="#b07030" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="495"  y1="0" x2="495"  y2="708" stroke="#9a6020" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="605"  y1="0" x2="605"  y2="708" stroke="#886020" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="715"  y1="0" x2="715"  y2="708" stroke="#1d57b0" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="825"  y1="0" x2="825"  y2="708" stroke="#0e808e" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="935"  y1="0" x2="935"  y2="708" stroke="#b86020" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="1045" y1="0" x2="1045" y2="708" stroke="#7a5c48" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+        <line x1="1155" y1="0" x2="1155" y2="708" stroke="#237038" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+
+        <rect x="0" y="6" width="1210" height="18" fill="#f0f4fb"/>
+        <text x="605" y="19" text-anchor="middle" font-size="10" fill="#557" font-weight="bold">① スキャンフェーズ + セキュリティ分類</text>
+
+        <line x1="56" y1="37" x2="164" y2="37" stroke="#553366" stroke-width="1.8"/>
+        <polygon points="154,33 164,37 154,41" fill="#553366"/>
+        <text x="110" y="32" text-anchor="middle" font-size="9.5" fill="#553366" font-weight="bold">スキャンボタン</text>
+
+        <line x1="166" y1="60" x2="824" y2="60" stroke="#1d57b0" stroke-width="1.8"/>
+        <polygon points="814,56 824,60 814,64" fill="#1d57b0"/>
+        <text x="495" y="55" text-anchor="middle" font-size="9.5" fill="#1d57b0" font-weight="bold">getCurrentLocation() → startScan()</text>
+        <text x="495" y="70" text-anchor="middle" font-size="8" fill="#889">GPS 位置取得後、wifiManager.startScan() を呼び出す</text>
+
+        <line x1="824" y1="90" x2="166" y2="90" stroke="#0e808e" stroke-width="1.8"/>
+        <polygon points="176,86 166,90 176,94" fill="#0e808e"/>
+        <text x="495" y="85" text-anchor="middle" font-size="9.5" fill="#0e808e" font-weight="bold">SCAN_RESULTS_AVAILABLE_ACTION</text>
+
+        <line x1="166" y1="115" x2="274" y2="115" stroke="#1d57b0" stroke-width="1.8"/>
+        <polygon points="264,111 274,115 264,119" fill="#1d57b0"/>
+        <text x="220" y="110" text-anchor="middle" font-size="9.5" fill="#1d57b0" font-weight="bold">groupByBssid(wifiManager.scanResults)</text>
+
+        <rect x="192" y="128" width="335" height="57" fill="none" stroke="#0e808e" stroke-width="1.3" rx="3"/>
+        <polygon points="192,128 302,128 302,143 292,149 192,149" fill="#0e808e"/>
+        <text x="245" y="141" text-anchor="middle" font-size="8.5" fill="white" font-weight="bold">alt  セキュリティ分類</text>
+        <rect x="194" y="151" width="331" height="15" fill="#eaf6f7" rx="2"/>
+        <text x="199" y="162" font-size="8" fill="#0e808e" font-weight="bold">[API 33+]</text>
+        <text x="370" y="162" text-anchor="middle" font-size="9" fill="#1a3535">getSecurityTypes() で取得</text>
+        <line x1="192" y1="167" x2="527" y2="167" stroke="#0e808e" stroke-width="0.8" stroke-dasharray="4,3"/>
+        <rect x="194" y="168" width="331" height="15" fill="#f4f9f9" rx="2"/>
+        <text x="199" y="179" font-size="8" fill="#667" font-weight="bold">[API 32-]</text>
+        <text x="370" y="179" text-anchor="middle" font-size="9" fill="#334">capabilities_raw を文字列解析</text>
+
+        <line x1="274" y1="224" x2="166" y2="224" stroke="#0e808e" stroke-width="1.8"/>
+        <polygon points="176,220 166,224 176,228" fill="#0e808e"/>
+        <text x="220" y="219" text-anchor="middle" font-size="9" fill="#0e808e" font-weight="bold">AccessPoint リスト</text>
+
+        <line x1="164" y1="246" x2="56" y2="246" stroke="#1d57b0" stroke-width="1.8"/>
+        <polygon points="66,242 56,246 66,250" fill="#1d57b0"/>
+        <text x="110" y="241" text-anchor="middle" font-size="9" fill="#1d57b0">AP 一覧表示・選択モード</text>
+
+        <line x1="56" y1="264" x2="164" y2="264" stroke="#553366" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <polygon points="154,260 164,264 154,268" fill="#553366"/>
+        <text x="110" y="259" text-anchor="middle" font-size="8.5" fill="#553366" font-weight="bold">全て選択ボタン</text>
+        <rect x="167" y="258" width="118" height="13" fill="#ede8f5" rx="3" stroke="#aa88cc" stroke-width="0.8"/>
+        <text x="226" y="268" text-anchor="middle" font-size="8" fill="#553366">UI 状態更新のみ</text>
+
+        <line x1="0" y1="285" x2="1210" y2="285" stroke="#dde" stroke-width="1" stroke-dasharray="4,3"/>
+        <rect x="260" y="278" width="690" height="13" fill="white"/>
+        <text x="605" y="288" text-anchor="middle" font-size="9" fill="#aab">AP を選択して「選択したAPを測定」ボタンをタップ</text>
+
+        <rect x="0" y="300" width="1210" height="18" fill="#f0f4fb"/>
+        <text x="605" y="313" text-anchor="middle" font-size="10" fill="#557" font-weight="bold">② Supplicant 測定フェーズ（AP 1台ずつ繰り返し）</text>
+
+        <rect x="3" y="322" width="1204" height="372" fill="none" stroke="#b8c4dc" stroke-width="1.2" stroke-dasharray="5,3" rx="4"/>
+        <rect x="3" y="319" width="65" height="14" fill="#b8c4dc" rx="3"/>
+        <text x="35" y="330" text-anchor="middle" font-size="8.5" fill="#446" font-weight="bold">loop [各AP]</text>
+
+        <line x1="56" y1="338" x2="384" y2="338" stroke="#553366" stroke-width="1.8"/>
+        <polygon points="374,334 384,338 374,342" fill="#553366"/>
+        <text x="220" y="333" text-anchor="middle" font-size="9" fill="#553366" font-weight="bold">選択したAPを測定ボタン</text>
+
+        <rect x="308" y="351" width="310" height="42" fill="#fdf8ee" stroke="#b89020" stroke-width="1.1" rx="3"/>
+        <polygon points="610,351 618,351 618,359 610,359" fill="#b89020" opacity="0.35"/>
+        <text x="315" y="363" font-size="8.5" fill="#806010" font-weight="bold">buildSpecifier(ap)</text>
+        <line x1="308" y1="368" x2="618" y2="368" stroke="#b89020" stroke-width="0.7" stroke-dasharray="3,2"/>
+        <text x="315" y="379" font-size="8" fill="#443300">[API 33+]  securityTypesRaw で判定</text>
+        <text x="315" y="391" font-size="8" fill="#777755">[API 32-]  capabilitiesRaw を文字列解析</text>
+
+        <rect x="379" y="415" width="12" height="230" fill="rgba(180,40,40,0.10)" stroke="#cc3333" stroke-width="1.2" rx="2"/>
+        <text transform="translate(397,530) rotate(-90)" text-anchor="middle" font-size="7.5" fill="#cc3333" font-weight="bold">withTimeoutOrNull（最大 10秒 / AP）</text>
+
+        <line x1="386" y1="416" x2="714" y2="416" stroke="#b07030" stroke-width="1.8"/>
+        <polygon points="704,412 714,416 704,420" fill="#b07030"/>
+        <text x="550" y="411" text-anchor="middle" font-size="9" fill="#b07030" font-weight="bold">requestNetwork(request, cb, Handler(Main), timeout=3秒)</text>
+
+        <rect x="628" y="420" width="215" height="22" fill="#fff4e0" stroke="#c87800" stroke-width="1" rx="3"/>
+        <polygon points="628,420 636,420 636,428 628,428" fill="#c87800" opacity="0.4"/>
+        <text x="638" y="430" font-size="7.5" fill="#7a4800" font-weight="bold">NO_ACTIVITY_TIMEOUT_MS = 3秒</text>
+        <text x="638" y="439" font-size="7" fill="#7a4800">3秒無応答 → CM が onUnavailable() を自動発火</text>
+
+        <line x1="716" y1="453" x2="934" y2="453" stroke="#aaa" stroke-width="1.2" stroke-dasharray="5,3"/>
+        <polygon points="924,449 934,453 924,457" fill="#aaa"/>
+        <text x="825" y="448" text-anchor="middle" font-size="8.5" fill="#999">内部：WifiService / HAL 経由</text>
+
+        <line x1="936" y1="477" x2="1044" y2="477" stroke="#7a5c48" stroke-width="1.5"/>
+        <polygon points="1034,473 1044,477 1034,481" fill="#7a5c48"/>
+        <text x="990" y="472" text-anchor="middle" font-size="9" fill="#7a5c48">認証コマンド</text>
+
+        <line x1="1046" y1="501" x2="1154" y2="501" stroke="#237038" stroke-width="1.5"/>
+        <polygon points="1144,497 1154,501 1144,505" fill="#237038"/>
+        <text x="1100" y="496" text-anchor="middle" font-size="9" fill="#237038">電波（Probe / Auth / Assoc）</text>
+
+        <line x1="1155" y1="523" x2="1046" y2="523" stroke="#237038" stroke-width="1.5"/>
+        <polygon points="1056,519 1046,523 1056,527" fill="#237038"/>
+        <text x="1100" y="518" text-anchor="middle" font-size="9" fill="#237038">応答</text>
+
+        <line x1="934" y1="546" x2="606" y2="546" stroke="#b86020" stroke-width="1.8"/>
+        <polygon points="616,542 606,546 616,550" fill="#b86020"/>
+        <text x="770" y="541" text-anchor="middle" font-size="9.5" fill="#b86020" font-weight="bold">SUPPLICANT_STATE_CHANGED_ACTION（DISCONNECTED）</text>
+
+        <line x1="934" y1="568" x2="606" y2="568" stroke="#b86020" stroke-width="1.8"/>
+        <polygon points="616,564 606,568 616,572" fill="#b86020"/>
+        <text x="770" y="563" text-anchor="middle" font-size="9.5" fill="#b86020" font-weight="bold">SUPPLICANT_STATE_CHANGED_ACTION（ASSOCIATING）</text>
+
+        <line x1="934" y1="590" x2="606" y2="590" stroke="#b86020" stroke-width="1.8"/>
+        <polygon points="616,586 606,590 616,594" fill="#b86020"/>
+        <text x="770" y="585" text-anchor="middle" font-size="9.5" fill="#b86020" font-weight="bold">SUPPLICANT_STATE_CHANGED_ACTION（ASSOCIATED / FOUR_WAY_HANDSHAKE / ...）</text>
+
+        <line x1="56" y1="609" x2="384" y2="609" stroke="#553366" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <polygon points="374,605 384,609 374,613" fill="#553366"/>
+        <text x="220" y="604" text-anchor="middle" font-size="8.5" fill="#553366" font-weight="bold">中断ボタン</text>
+        <rect x="56" y="614" width="130" height="12" fill="#ede8f5" rx="2" stroke="#aa88cc" stroke-width="0.8"/>
+        <text x="121" y="624" text-anchor="middle" font-size="7.5" fill="#553366">stopRequested = true</text>
+
+        <line x1="386" y1="634" x2="714" y2="634" stroke="#b07030" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <polygon points="704,630 714,634 704,638" fill="#b07030"/>
+        <text x="550" y="629" text-anchor="middle" font-size="9" fill="#b07030">unregisterNetworkCallback(cb)</text>
+
+        <line x1="714" y1="654" x2="496" y2="654" stroke="#1d57b0" stroke-width="1.8"/>
+        <polygon points="506,650 496,654 506,658" fill="#1d57b0"/>
+        <text x="605" y="649" text-anchor="middle" font-size="9.5" fill="#1d57b0" font-weight="bold">onAvailable(network) / onUnavailable()</text>
+
+        <text x="605" y="682" text-anchor="middle" font-size="8.5" fill="#aab">300ms 待機後、次の AP へ（最大 10秒 / AP。無応答 3秒で onUnavailable 早期発火）</text>
+
+        <rect x="0" y="696" width="1210" height="20" fill="#f0f4fb"/>
+        <text x="605" y="710" text-anchor="middle" font-size="9.5" fill="#667">
+          全 AP 測定完了 → ap.copy(supplicantStates, finalState, elapsedMs) → JSON 保存 → サーバ送信
+        </text>
+      </svg>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S7 データ構造
+══════════════════════════ -->
+<div class="slide" style="overflow-y: auto;">
+  <div class="label">データ構造</div>
+  <h2>サプリカント測定データ構造</h2>
+  <p class="lead" style="font-size:13px; margin-bottom:10px;">
+    beacon_scan アプリのサプリカント状態取得機能が生成するJSONデータ構造の解説（2025-09版）
+  </p>
+  <hr class="rule">
+
+  <div class="data-struct">
+    <div class="layout">
+
+      <div class="card">
+        <div class="card-header h-scan">① データ構造の全体像</div>
+        <div class="card-body">
+          <p style="font-size:11.5px;color:#556;margin-bottom:12px;">
+            1回のスキャンが <strong>1エントリ</strong> を生成します。
+            エントリは端末内ファイル <code style="font-size:11px;">pending_scans.json</code>（配列）に蓄積され、HTTP POST でサーバへ送信されます。
+          </p>
+          <div class="nest">
+            <span class="nest-label">scan_entry（オブジェクト × 1スキャン）</span>
+            <div class="field-row"><span class="key">scan_id</span>       <span class="val-s">"xxxxxxxx-…"</span>  <span class="comment">このスキャン固有UUID</span></div>
+            <div class="field-row"><span class="key">device_id</span>     <span class="val-s">"xxxxxxxx-…"</span>  <span class="comment">端末固有UUID（永続）</span></div>
+            <div class="field-row"><span class="key">device</span>        <span class="val-arr">{ … }</span>          <span class="comment">機種情報</span></div>
+            <div class="field-row"><span class="key">scanned_at</span>    <span class="val-s">"2025-09-25T14:30:00"</span></div>
+            <div class="field-row"><span class="key">label</span>         <span class="val-s">""</span>  <span class="comment">セッションラベル or 空文字</span></div>
+            <div class="field-row"><span class="key">location</span>      <span class="val-arr">{ … } or null</span></div>
+            <div class="nest-inner">
+              <span class="nest-inner-label">access_points [ ] — AP 1 台 = 1 要素</span>
+              <div class="field-row"><span class="key">bssid</span>             <span class="val-s">"aa:bb:cc:dd:ee:ff"</span></div>
+              <div class="field-row"><span class="key">mld_mac_address</span>   <span class="val-s">"…" or null</span>  <span class="comment">Wi-Fi 7 MLO のみ</span></div>
+              <div class="field-row"><span class="key">oui</span>               <span class="val-s">"aa:bb:cc"</span>  <span class="comment">BSSIDの先頭3オクテット</span></div>
+              <div class="field-row"><span class="key">ssids</span>             <span class="val-arr">[ "MyNetwork" ]</span></div>
+              <div class="field-row"><span class="key">rssi_dbm</span>          <span class="val-n">-62</span></div>
+              <div class="field-row"><span class="key">frequency_mhz</span>     <span class="val-n">5180</span></div>
+              <div class="field-row"><span class="key">band</span>              <span class="val-s">"5GHz"</span></div>
+              <div class="field-row"><span class="key">channel_width_mhz</span> <span class="val-n">80</span></div>
+              <div class="field-row"><span class="key">wifi_standard</span>     <span class="val-s">"802.11ax"</span></div>
+              <div class="field-row"><span class="key">wifi_standard_code</span><span class="val-n">6</span></div>
+              <div class="field-row"><span class="key">security</span>          <span class="val-s">"WPA2"</span></div>
+              <div class="field-row"><span class="key">capabilities_raw</span>  <span class="val-s">"[WPA2-PSK-CCMP][ESS]"</span></div>
+              <div class="nest-supp">
+                <span class="nest-supp-label">サプリカント測定フィールド</span>
+                <div class="field-row"><span class="key">supplicant_states</span>       <span class="val-arr">[ "DISCONNECTED", "ASSOCIATING", … ]</span></div>
+                <div class="field-row"><span class="key">supplicant_final_state</span>  <span class="val-s">"COMPLETED"</span>  <span class="comment">← 下の凡例参照</span></div>
+                <div class="field-row"><span class="key">supplicant_elapsed_ms</span>   <span class="val-n">3420</span>  <span class="comment">接続試行の経過時間</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header h-scan">② スキャン単位のフィールド</div>
+        <div class="card-body">
+          <table class="field-table">
+            <tr><th>フィールド名</th><th>型</th><th>説明</th></tr>
+            <tr><td><span class="field-name">scan_id</span></td><td><span class="field-type">string</span></td><td class="field-desc">スキャン1回ごとに生成するUUID。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">device_id</span></td><td><span class="field-type">string</span></td><td class="field-desc">端末を識別するUUID。初回起動時に生成し SharedPreferences に永続保持。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">device.manufacturer</span></td><td><span class="field-type">string</span></td><td class="field-desc">端末メーカー名。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">device.model</span></td><td><span class="field-type">string</span></td><td class="field-desc">端末モデル名。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">device.android_api</span></td><td><span class="field-type">int</span></td><td class="field-desc">Android APIレベル。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">scanned_at</span></td><td><span class="field-type">string</span></td><td class="field-desc">スキャン実行時刻（ISO 8601形式）。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">label</span></td><td><span class="field-type">string</span></td><td class="field-desc">自動スキャンのセッション単位ラベル。手動スキャン・未設定時は空文字。</td></tr>
+            <tr><td><span class="field-name">location.latitude</span></td><td><span class="field-type">double</span></td><td class="field-desc" rowspan="3">GPS位置情報。取得できない場合は <code>location</code> ごと <code>null</code>。<span class="badge-nullable">null あり</span></td></tr>
+            <tr><td><span class="field-name">location.longitude</span></td><td><span class="field-type">double</span></td></tr>
+            <tr><td><span class="field-name">location.accuracy_m</span></td><td><span class="field-type">double</span></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header h-ap">③ AP 単位のフィールド（access_points 配列の各要素）</div>
+        <div class="card-body">
+          <table class="field-table">
+            <tr><th>フィールド名</th><th>型</th><th>説明</th></tr>
+            <tr><td><span class="field-name">bssid</span></td><td><span class="field-type">string</span></td><td class="field-desc">AP の MACアドレス。APを識別する主キー。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">mld_mac_address</span></td><td><span class="field-type">string?</span></td><td class="field-desc">Wi-Fi 7 MLO 対応APの物理MACアドレス。非対応時は null。<span class="badge-nullable">null あり</span><span class="badge-api">API 33+</span></td></tr>
+            <tr><td><span class="field-name">oui</span></td><td><span class="field-type">string</span></td><td class="field-desc">BSSIDの先頭3オクテット（ベンダー識別子）。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">ssids</span></td><td><span class="field-type">string[]</span></td><td class="field-desc">BSSIDが発しているSSIDの一覧。非公開APでは空配列。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">rssi_dbm</span></td><td><span class="field-type">int</span></td><td class="field-desc">電波強度（dBm）。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">frequency_mhz</span></td><td><span class="field-type">int</span></td><td class="field-desc">使用周波数（MHz）。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">band</span></td><td><span class="field-type">string</span></td><td class="field-desc">"2.4GHz" / "5GHz" / "6GHz"。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">channel_width_mhz</span></td><td><span class="field-type">int</span></td><td class="field-desc">チャネル幅（20/40/80/160/320 MHz）。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">wifi_standard</span></td><td><span class="field-type">string</span></td><td class="field-desc">"802.11a/b/g" / "802.11n" / "802.11ac" / "802.11ax" / "802.11be"。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">wifi_standard_code</span></td><td><span class="field-type">int</span></td><td class="field-desc">Wi-Fi世代の整数コード。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">security</span></td><td><span class="field-type">string</span></td><td class="field-desc">"Open" / "WEP" / "WPA" / "WPA2" / "WPA3" / "WPA2/WPA3"。<span class="badge-always">常に取得</span></td></tr>
+            <tr><td><span class="field-name">capabilities_raw</span></td><td><span class="field-type">string</span></td><td class="field-desc">OSが組み立てたセキュリティ情報の生文字列。<span class="badge-always">常に取得</span></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header h-supp">④ サプリカント測定フィールド（AP 単位）</div>
+        <div class="card-body">
+          <table class="field-table">
+            <tr><th>フィールド名</th><th>型</th><th>説明</th></tr>
+            <tr><td><span class="field-name">supplicant_states</span></td><td><span class="field-type">string[]</span></td><td class="field-desc">接続試行中に wpa_supplicant が発した状態遷移の時系列リスト。<br>例（Open）: <code>["DISCONNECTED","SCANNING","AUTHENTICATING","ASSOCIATING","ASSOCIATED","COMPLETED"]</code></td></tr>
+            <tr><td><span class="field-name">supplicant_final_state</span></td><td><span class="field-type">string</span></td><td class="field-desc">接続試行の結末。値の詳細は⑤の凡例参照。</td></tr>
+            <tr><td><span class="field-name">supplicant_elapsed_ms</span></td><td><span class="field-type">long</span></td><td class="field-desc">AP1台あたりの接続試行にかかった時間（ms）。最大10,000ms。</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header h-simple">⑦ 簡易測定モードのデータ構造</div>
+        <div class="card-body">
+          <p style="font-size:11.5px;color:#556;margin-bottom:8px;">
+            スキャン結果のみを保存するモード。接続試行は行わないため AP 一覧・電波情報のみ記録します。
+            <code>pending_simple_scans.json</code> に蓄積されます。
+          </p>
+          <p style="font-size:11px;background:#f4f5f8;border-left:3px solid #99a;padding:6px 10px;margin-bottom:10px;border-radius:0 4px 4px 0;color:#556;">
+            <code>access_points</code> の各要素に <code>supplicant_*</code> フィールドは含まれません。それ以外のフィールド構成は他モードと共通です。
+          </p>
+          <div class="json-block">[
+  {
+    <span class="jk">"scan_id"</span>:     <span class="js">"a1b2c3d4-…"</span>,
+    <span class="jk">"device_id"</span>:   <span class="js">"9e8d7c6b-…"</span>,
+    <span class="jk">"device"</span>: { <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>, <span class="jk">"model"</span>: <span class="js">"Pixel 8"</span>, <span class="jk">"android_api"</span>: <span class="jn">34</span> },
+    <span class="jk">"scanned_at"</span>:  <span class="js">"2025-09-25T14:30:00"</span>,
+    <span class="jk">"label"</span>:       <span class="js">""</span>,
+    <span class="jk">"location"</span>: { <span class="jk">"latitude"</span>: <span class="jn">35.68123</span>, <span class="jk">"longitude"</span>: <span class="jn">139.76543</span>, <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span> },
+    <span class="jk">"access_points"</span>: [
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>:             [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>:              <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>:          <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>
+      },
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>:             [], <span class="jk">"rssi_dbm"</span>: <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>:              <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>:          <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>
+      }
+    ]
+  }
+]</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header h-conn-ap">⑧ 接続試行（AP単位）のデータ構造</div>
+        <div class="card-body">
+          <p style="font-size:11.5px;color:#556;margin-bottom:8px;">
+            各 AP を個別に選択して接続試行を行うモード。<code>pending_scans.json</code> に蓄積されます。
+          </p>
+          <p style="font-size:11px;background:#f4f5f8;border-left:3px solid #99a;padding:6px 10px;margin-bottom:10px;border-radius:0 4px 4px 0;color:#556;">
+            <code>access_points</code> の全要素に <code>supplicant_states</code> / <code>supplicant_final_state</code> / <code>supplicant_elapsed_ms</code> が付与されます。
+          </p>
+          <div class="json-block">[
+  {
+    <span class="jk">"scan_id"</span>:     <span class="js">"f3a2b1c0-…"</span>,
+    <span class="jk">"device_id"</span>:   <span class="js">"9e8d7c6b-…"</span>,
+    <span class="jk">"device"</span>: { <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>, <span class="jk">"model"</span>: <span class="js">"Pixel 8"</span>, <span class="jk">"android_api"</span>: <span class="jn">34</span> },
+    <span class="jk">"scanned_at"</span>:  <span class="js">"2025-09-25T14:30:00"</span>,
+    <span class="jk">"label"</span>:       <span class="js">""</span>,
+    <span class="jk">"location"</span>: { <span class="jk">"latitude"</span>: <span class="jn">35.68123</span>, <span class="jk">"longitude"</span>: <span class="jn">139.76543</span>, <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span> },
+    <span class="jk">"access_points"</span>: [
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>:             [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>:              <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>:          <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>,
+        <span class="jk">"supplicant_states"</span>: [
+          <span class="js">"DISCONNECTED"</span>, <span class="js">"ASSOCIATING"</span>, <span class="js">"ASSOCIATED"</span>,
+          <span class="js">"FOUR_WAY_HANDSHAKE"</span>, <span class="js">"DISCONNECTED"</span>
+        ],
+        <span class="jk">"supplicant_final_state"</span>: <span class="js">"FAILED_AT_DISCONNECTED"</span>,
+        <span class="jk">"supplicant_elapsed_ms"</span>:  <span class="jn">2840</span>
+      },
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>:             [],  <span class="jc">// 非公開AP</span>
+        <span class="jk">"rssi_dbm"</span>:          <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>:              <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>:          <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>,
+        <span class="jk">"supplicant_states"</span>: [
+          <span class="js">"DISCONNECTED"</span>, <span class="js">"SCANNING"</span>, <span class="js">"AUTHENTICATING"</span>,
+          <span class="js">"ASSOCIATING"</span>, <span class="js">"ASSOCIATED"</span>, <span class="js">"COMPLETED"</span>
+        ],
+        <span class="jk">"supplicant_final_state"</span>: <span class="js">"COMPLETED"</span>,
+        <span class="jk">"supplicant_elapsed_ms"</span>:  <span class="jn">1560</span>
+      }
+    ]
+  }
+]</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header h-conn-ssid">⑨ 接続試行（SSID単位）のデータ構造</div>
+        <div class="card-body">
+          <p style="font-size:11.5px;color:#556;margin-bottom:8px;">
+            ユーザが選択した SSID に属する AP に絞って接続試行を行うモード。<code>pending_ssid_scans.json</code> に蓄積されます。
+          </p>
+          <p style="font-size:11px;background:#f4f5f8;border-left:3px solid #99a;padding:6px 10px;margin-bottom:10px;border-radius:0 4px 4px 0;color:#556;">
+            <strong>targeted_ssids</strong>: 選択した SSID のリスト。／
+            <strong>scan_results</strong>: スキャン検出の全 AP（<code>supplicant_*</code> なし）。／
+            <strong>access_points</strong>: targeted_ssids に合致する AP のみ（<code>supplicant_*</code> あり）。
+          </p>
+          <div class="json-block">[
+  {
+    <span class="jk">"scan_id"</span>:       <span class="js">"b2c3d4e5-…"</span>,
+    <span class="jk">"device_id"</span>:     <span class="js">"9e8d7c6b-…"</span>,
+    <span class="jk">"device"</span>: { <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>, <span class="jk">"model"</span>: <span class="js">"Pixel 8"</span>, <span class="jk">"android_api"</span>: <span class="jn">34</span> },
+    <span class="jk">"scanned_at"</span>:    <span class="js">"2025-09-25T14:32:00"</span>,
+    <span class="jk">"label"</span>:         <span class="js">""</span>,
+    <span class="jk">"targeted_ssids"</span>: [<span class="js">"MyWifi"</span>],  <span class="jc">// 選択した SSID</span>
+    <span class="jk">"location"</span>: { <span class="jk">"latitude"</span>: <span class="jn">35.68123</span>, <span class="jk">"longitude"</span>: <span class="jn">139.76543</span>, <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span> },
+    <span class="jk">"scan_results"</span>: [  <span class="jc">// スキャン検出の全 AP（supplicant フィールドなし）</span>
+      {
+        <span class="jk">"bssid"</span>: <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>: [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>: <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>: <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>: <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>
+      },
+      {
+        <span class="jk">"bssid"</span>: <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>: [], <span class="jk">"rssi_dbm"</span>: <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>: <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>: <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>: <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>
+      }
+    ],
+    <span class="jk">"access_points"</span>: [  <span class="jc">// targeted_ssids に合致する AP のみ（supplicant フィールドあり）</span>
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>:             [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>:              <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>:          <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>,
+        <span class="jk">"supplicant_states"</span>: [
+          <span class="js">"DISCONNECTED"</span>, <span class="js">"ASSOCIATING"</span>, <span class="js">"ASSOCIATED"</span>,
+          <span class="js">"FOUR_WAY_HANDSHAKE"</span>, <span class="js">"DISCONNECTED"</span>
+        ],
+        <span class="jk">"supplicant_final_state"</span>: <span class="js">"FAILED_AT_DISCONNECTED"</span>,
+        <span class="jk">"supplicant_elapsed_ms"</span>:  <span class="jn">2840</span>
+      }
+    ]
+  }
+]</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header h-conn-sec">⑩ 接続試行（security単位）のデータ構造</div>
+        <div class="card-body">
+          <p style="font-size:11.5px;color:#556;margin-bottom:8px;">
+            ユーザが選択したセキュリティ規格に属する AP に絞って接続試行を行うモード。<code>pending_security_scans.json</code> に蓄積されます。
+          </p>
+          <p style="font-size:11px;background:#f4f5f8;border-left:3px solid #99a;padding:6px 10px;margin-bottom:10px;border-radius:0 4px 4px 0;color:#556;">
+            <strong>targeted_security_groups</strong>: 選択したセキュリティ規格のリスト（例: <code>["WPA2", "Open"]</code>）。／
+            <strong>scan_results</strong>: 全 AP（<code>supplicant_*</code> なし）。／
+            <strong>access_points</strong>: 合致する AP のみ（<code>supplicant_*</code> あり）。
+          </p>
+          <div class="json-block">[
+  {
+    <span class="jk">"scan_id"</span>:       <span class="js">"c3d4e5f6-…"</span>,
+    <span class="jk">"device_id"</span>:     <span class="js">"9e8d7c6b-…"</span>,
+    <span class="jk">"device"</span>: { <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>, <span class="jk">"model"</span>: <span class="js">"Pixel 8"</span>, <span class="jk">"android_api"</span>: <span class="jn">34</span> },
+    <span class="jk">"scanned_at"</span>:    <span class="js">"2025-09-25T14:34:00"</span>,
+    <span class="jk">"label"</span>:         <span class="js">""</span>,
+    <span class="jk">"targeted_security_groups"</span>: [<span class="js">"Open"</span>],  <span class="jc">// 選択したセキュリティ規格</span>
+    <span class="jk">"location"</span>: { <span class="jk">"latitude"</span>: <span class="jn">35.68123</span>, <span class="jk">"longitude"</span>: <span class="jn">139.76543</span>, <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span> },
+    <span class="jk">"scan_results"</span>: [  <span class="jc">// スキャン検出の全 AP（supplicant フィールドなし）</span>
+      {
+        <span class="jk">"bssid"</span>: <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>: [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>: <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>: <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>: <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>
+      },
+      {
+        <span class="jk">"bssid"</span>: <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>: [], <span class="jk">"rssi_dbm"</span>: <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>: <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>: <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>: <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>
+      }
+    ],
+    <span class="jk">"access_points"</span>: [  <span class="jc">// targeted_security_groups に合致する AP のみ（supplicant フィールドあり）</span>
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>:             [], <span class="jk">"rssi_dbm"</span>: <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>:              <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>:          <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>,
+        <span class="jk">"supplicant_states"</span>: [
+          <span class="js">"DISCONNECTED"</span>, <span class="js">"SCANNING"</span>, <span class="js">"AUTHENTICATING"</span>,
+          <span class="js">"ASSOCIATING"</span>, <span class="js">"ASSOCIATED"</span>, <span class="js">"COMPLETED"</span>
+        ],
+        <span class="jk">"supplicant_final_state"</span>: <span class="js">"COMPLETED"</span>,
+        <span class="jk">"supplicant_elapsed_ms"</span>:  <span class="jn">1560</span>
+      }
+    ]
+  }
+]</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S8 10/7以降に進めること
+══════════════════════════ -->
+<div class="slide" style="overflow-y: auto;">
+  <div class="label">今後の予定</div>
+  <h2>10/7 以降に進めること</h2>
+  <hr class="rule">
+
+  <ul class="num-list">
+    <li>
+      <span class="num">1</span>
+      <span>RSSIを自動取得・接続をできないか？（ボタンを押すのを省略できないか？）</span>
+    </li>
+    <li>
+      <span class="num">2</span>
+      <span>公衆無線LANにこだわる必要はない（本来の目的はデータ収集）（公衆無線LANは一つの目的としての手段）</span>
+    </li>
+    <li>
+      <span class="num">3</span>
+      <span>いまのところ3sでだめで、5sならokとかはあるの？</span>
+    </li>
+    <li>
+      <span class="num">4</span>
+      <span>認証過程において時間を有するような処理過程がある？1sでとれるならそれでいいのでは？</span>
+    </li>
+    <li>
+      <span class="num">5</span>
+      <span>スムーズにつながるときとつながらないときの比較が必要・スムーズにつながるとその後のスループットが高いとか、RSSI強いとか傾向ある（その後の通信が良好なのか？）</span>
+    </li>
+    <li>
+      <span class="num">6</span>
+      <span>3sじゃなくていいなら、移動しながらBSSID・サプリカント取得できるならそっちの方が大量データ取得できる・どれくらいの時間でサプリカントとれないの？（本当に立ち止まる必要があるのか？）</span>
+    </li>
+    <li>
+      <span class="num">7</span>
+      <span>可視化の方法（色、線の太さ、塗る領域変更など）</span>
+    </li>
+    <li>
+      <span class="num">8</span>
+      <span>11月中までしか研究（優先事項を考慮）</span>
+    </li>
+  </ul>
+</div>
+
+<!-- ══════════════════════════
+     S9 OSからの応答
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 3 — 状態記録</div>
+  <h2>接続試行中に OS から届く 3 種類の情報</h2>
+  <hr class="rule">
+</div>
+
+<!-- ══════════════════════════
+     S10 最終状態の種類
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 3 — 測定結果</div>
+  <h2>接続試行の結果：最終状態の種類</h2>
+  <hr class="rule">
+</div>
+
+<!-- ══════════════════════════
+     S11 収集・送信データ
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">Step 4 — データ送信</div>
+  <h2>サーバーへ送信するデータの構造</h2>
+  <hr class="rule">
+</div>
+
+<!-- ══════════════════════════
+     S12 まとめ
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">まとめ</div>
+  <h2>このアプリが実現すること</h2>
+  <hr class="rule">
+</div>
+
+</div><!-- /deck -->
+
+<div id="nav">
+  <button id="btn-prev" disabled>← 前へ</button>
+  <span id="slide-counter">1 / 12</span>
+  <button id="btn-next">次へ →</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total  = slides.length;
+  let current  = 0;
+
+  function go(n) {
+    slides[current].classList.remove('active');
+    current = Math.max(0, Math.min(total - 1, n));
+    slides[current].classList.add('active');
+    document.getElementById('slide-counter').textContent = `${current + 1} / ${total}`;
+    document.getElementById('btn-prev').disabled = current === 0;
+    document.getElementById('btn-next').disabled = current === total - 1;
+    document.getElementById('progress').style.width = `${((current + 1) / total) * 100}%`;
+  }
+
+  document.getElementById('btn-prev').addEventListener('click', () => go(current - 1));
+  document.getElementById('btn-next').addEventListener('click', () => go(current + 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   go(current - 1);
+  });
+
+  document.getElementById('deck').addEventListener('click', e => {
+    if (!e.target.closest('#nav')) go(current + 1);
+  });
+
+  go(0);
+</script>
+</body>
+</html>
