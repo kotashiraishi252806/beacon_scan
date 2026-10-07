@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>WiFi Supplicant 測定 — シーケンス図（現行実装 / 2025-09 版）</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Hiragino Sans', 'Meiryo', 'Segoe UI', sans-serif;
+      background: #e8edf4;
+      padding: 40px 20px 60px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    h1   { font-size: 18px; color: #334; margin-bottom: 6px; }
+    .sub { font-size: 12px; color: #889; margin-bottom: 28px; }
+
+    .diagram {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.1);
+      border: 1px solid #dde;
+      overflow: hidden;
+    }
+
+    /* 11列 × 110px = 1210px */
+    .hrow { display: flex; width: 1210px; }
+    .gl {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: bold; text-transform: uppercase;
+      letter-spacing: 0.8px; color: white; height: 20px;
+      border-right: 1px solid rgba(255,255,255,0.25); flex-shrink: 0;
+    }
+    .gl:last-child { border-right: none; }
+    .g-user   { background: #553366; }
+    .g-device { background: #8aa4c0; }
+    .g-app    { background: #5577cc; }
+    .g-ma     { background: #3a70b0; }
+    .g-sm     { background: #b07030; }
+    .g-os     { background: #5890d0; }
+    .g-fw     { background: #3668b8; }
+    .g-lx     { background: #b86820; }
+    .g-ext    { background: #2a8040; }
+
+    .prow { display: flex; width: 1210px; }
+    .p {
+      width: 110px; padding: 4px 2px; text-align: center;
+      font-size: 9.5px; font-weight: bold;
+      font-family: 'Courier New', monospace; color: white; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; line-height: 1.3;
+      border-right: 1px solid rgba(255,255,255,0.2); flex-shrink: 0;
+    }
+    .p:last-child { border-right: none; }
+    .p-user    { background: #553366; }
+    .p-scan    { background: #1d57b0; }
+    .p-sec     { background: #0e808e; }
+    .p-measure { background: #b07030; }
+    .p-cb      { background: #9a6020; }
+    .p-suprec  { background: #886020; }
+    .p-cm      { background: #1d57b0; }
+    .p-wm      { background: #0e808e; }
+    .p-wpa     { background: #b86020; }
+    .p-driver  { background: #7a5c48; }
+    .p-ap      { background: #237038; }
+  </style>
+</head>
+<body>
+
+<h1>WiFi Supplicant 測定 — シーケンス図（現行実装 / 2025-09 版）</h1>
+<p class="sub">
+  上部ラベルで包含階層を示す。矢印は時系列順（上→下）。紫の矢印はユーザ操作。<br>
+  ① スキャン+セキュリティ分類フェーズ（getSecurityTypes() 使用）→ ② Supplicant 測定フェーズ。<br>
+  <strong>8/3版からの変更点：</strong>
+  DIALOG_TIMEOUT_MS 15秒→<strong>10秒</strong> ／
+  requestNetwork に <strong>Handler + NO_ACTIVITY_TIMEOUT_MS（3秒）</strong> を追加。
+</p>
+
+<div class="diagram">
+
+  <!-- 階層 0：外部（ユーザ） | Android デバイス | 外部（AP） -->
+  <div class="hrow">
+    <div class="gl g-user"   style="width:110px;">外部（操作者）</div>
+    <div class="gl g-device" style="width:990px;">Android デバイス</div>
+    <div class="gl g-ext"    style="width:110px;">外部</div>
+  </div>
+
+  <!-- 階層 1 -->
+  <div class="hrow">
+    <div class="gl g-user" style="width:110px;"></div>
+    <div class="gl g-app"  style="width:550px;">アプリ</div>
+    <div class="gl g-os"   style="width:440px;">Android OS</div>
+    <div class="gl g-ext"  style="width:110px;"></div>
+  </div>
+
+  <!-- 階層 2 -->
+  <div class="hrow">
+    <div class="gl g-user" style="width:110px;"></div>
+    <div class="gl g-ma"   style="width:220px;">MainActivity.kt</div>
+    <div class="gl g-sm"   style="width:330px;">SupplicantMeasurer.kt</div>
+    <div class="gl g-fw"   style="width:220px;">Android Framework</div>
+    <div class="gl g-lx"   style="width:220px;">Linux</div>
+    <div class="gl g-ext"  style="width:110px;"></div>
+  </div>
+
+  <!--
+    列中心 x:
+      ユーザ                =   55
+      onScanResultsReady()  =  165  (MainActivity.kt)
+      getSecurity()         =  275  (MainActivity.kt)
+      measureForAp()        =  385  (SupplicantMeasurer.kt)
+      cb                    =  495  (SupplicantMeasurer.kt)
+      supplicantReceiver    =  605  (SupplicantMeasurer.kt)
+      ConnectivityManager   =  715
+      WifiManager/WifiSvc   =  825
+      wpa_supplicant        =  935
+      WiFiDriver            = 1045
+      AP                    = 1155
+  -->
+  <div class="prow">
+    <div class="p p-user">ユーザ</div>
+    <div class="p p-scan">onScan<br>ResultsReady()</div>
+    <div class="p p-sec">get<br>Security()</div>
+    <div class="p p-measure">measure<br>ForAp()</div>
+    <div class="p p-cb">cb</div>
+    <div class="p p-suprec">supplicant<br>Receiver</div>
+    <div class="p p-cm">Connectivity<br>Manager</div>
+    <div class="p p-wm">WifiManager<br>/ WifiSvc</div>
+    <div class="p p-wpa">wpa_<br>supplicant</div>
+    <div class="p p-driver">WiFi<br>ドライバ</div>
+    <div class="p p-ap">AP</div>
+  </div>
+
+  <svg width="1210" height="730" style="display:block;">
+
+    <!-- ── ライフライン ── -->
+    <line x1="55"   y1="0" x2="55"   y2="708" stroke="#553366" stroke-width="1" stroke-dasharray="5,4" opacity="0.25"/>
+    <line x1="165"  y1="0" x2="165"  y2="708" stroke="#1d57b0" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="275"  y1="0" x2="275"  y2="708" stroke="#0e808e" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="385"  y1="0" x2="385"  y2="708" stroke="#b07030" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="495"  y1="0" x2="495"  y2="708" stroke="#9a6020" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="605"  y1="0" x2="605"  y2="708" stroke="#886020" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="715"  y1="0" x2="715"  y2="708" stroke="#1d57b0" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="825"  y1="0" x2="825"  y2="708" stroke="#0e808e" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="935"  y1="0" x2="935"  y2="708" stroke="#b86020" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="1045" y1="0" x2="1045" y2="708" stroke="#7a5c48" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+    <line x1="1155" y1="0" x2="1155" y2="708" stroke="#237038" stroke-width="1" stroke-dasharray="5,4" opacity="0.28"/>
+
+    <!-- ═══════════════════════════════════════════════════
+         ① スキャンフェーズ + セキュリティ分類
+    ═══════════════════════════════════════════════════ -->
+    <rect x="0" y="6" width="1210" height="18" fill="#f0f4fb"/>
+    <text x="605" y="19" text-anchor="middle" font-size="10" fill="#557" font-weight="bold">
+      ① スキャンフェーズ + セキュリティ分類
+    </text>
+
+    <!-- ユーザ → onScanResultsReady : スキャンボタン -->
+    <line x1="56" y1="37" x2="164" y2="37" stroke="#553366" stroke-width="1.8"/>
+    <polygon points="154,33 164,37 154,41" fill="#553366"/>
+    <text x="110" y="32" text-anchor="middle" font-size="9.5" fill="#553366" font-weight="bold">スキャンボタン</text>
+
+    <!-- onScanResultsReady → WifiManager : GPS取得 + startScan() -->
+    <line x1="166" y1="60" x2="824" y2="60" stroke="#1d57b0" stroke-width="1.8"/>
+    <polygon points="814,56 824,60 814,64" fill="#1d57b0"/>
+    <text x="495" y="55" text-anchor="middle" font-size="9.5" fill="#1d57b0" font-weight="bold">getCurrentLocation() → startScan()</text>
+    <text x="495" y="70" text-anchor="middle" font-size="8" fill="#889">GPS 位置取得後、wifiManager.startScan() を呼び出す</text>
+
+    <!-- WifiManager → onScanResultsReady : SCAN_RESULTS_AVAILABLE_ACTION -->
+    <line x1="824" y1="90" x2="166" y2="90" stroke="#0e808e" stroke-width="1.8"/>
+    <polygon points="176,86 166,90 176,94" fill="#0e808e"/>
+    <text x="495" y="85" text-anchor="middle" font-size="9.5" fill="#0e808e" font-weight="bold">SCAN_RESULTS_AVAILABLE_ACTION</text>
+
+    <!-- onScanResultsReady → getSecurity : groupByBssid(scanResults) -->
+    <line x1="166" y1="115" x2="274" y2="115" stroke="#1d57b0" stroke-width="1.8"/>
+    <polygon points="264,111 274,115 264,119" fill="#1d57b0"/>
+    <text x="220" y="110" text-anchor="middle" font-size="9.5" fill="#1d57b0" font-weight="bold">groupByBssid(wifiManager.scanResults)</text>
+
+    <!-- ══ [alt] セキュリティ分類分岐 ══ -->
+    <rect x="192" y="128" width="335" height="57" fill="none" stroke="#0e808e" stroke-width="1.3" rx="3"/>
+    <polygon points="192,128 302,128 302,143 292,149 192,149" fill="#0e808e"/>
+    <text x="245" y="141" text-anchor="middle" font-size="8.5" fill="white" font-weight="bold">alt  セキュリティ分類</text>
+
+    <!-- API 33+ 行 -->
+    <rect x="194" y="151" width="331" height="15" fill="#eaf6f7" rx="2"/>
+    <text x="199" y="162" font-size="8" fill="#0e808e" font-weight="bold">[API 33+]</text>
+    <text x="370" y="162" text-anchor="middle" font-size="9" fill="#1a3535">getSecurityTypes() で取得</text>
+
+    <!-- 分岐区切り線 -->
+    <line x1="192" y1="167" x2="527" y2="167" stroke="#0e808e" stroke-width="0.8" stroke-dasharray="4,3"/>
+
+    <!-- API 32- 行 -->
+    <rect x="194" y="168" width="331" height="15" fill="#f4f9f9" rx="2"/>
+    <text x="199" y="179" font-size="8" fill="#667" font-weight="bold">[API 32-]</text>
+    <text x="370" y="179" text-anchor="middle" font-size="9" fill="#334">capabilities_raw を文字列解析</text>
+
+    <!-- getSecurity → onScanResultsReady : AccessPoint list -->
+    <line x1="274" y1="224" x2="166" y2="224" stroke="#0e808e" stroke-width="1.8"/>
+    <polygon points="176,220 166,224 176,228" fill="#0e808e"/>
+    <text x="220" y="219" text-anchor="middle" font-size="9" fill="#0e808e" font-weight="bold">AccessPoint リスト</text>
+
+    <!-- onScanResultsReady → ユーザ : AP一覧・選択モード表示 -->
+    <line x1="164" y1="246" x2="56" y2="246" stroke="#1d57b0" stroke-width="1.8"/>
+    <polygon points="66,242 56,246 66,250" fill="#1d57b0"/>
+    <text x="110" y="241" text-anchor="middle" font-size="9" fill="#1d57b0">AP 一覧表示・選択モード</text>
+
+    <!-- ユーザ ··→ アプリUI : 全て選択ボタン -->
+    <line x1="56" y1="264" x2="164" y2="264" stroke="#553366" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <polygon points="154,260 164,264 154,268" fill="#553366"/>
+    <text x="110" y="259" text-anchor="middle" font-size="8.5" fill="#553366" font-weight="bold">全て選択ボタン</text>
+    <rect x="167" y="258" width="118" height="13" fill="#ede8f5" rx="3" stroke="#aa88cc" stroke-width="0.8"/>
+    <text x="226" y="268" text-anchor="middle" font-size="8" fill="#553366">UI 状態更新のみ</text>
+
+    <!-- フェーズ区切り -->
+    <line x1="0" y1="285" x2="1210" y2="285" stroke="#dde" stroke-width="1" stroke-dasharray="4,3"/>
+    <rect x="260" y="278" width="690" height="13" fill="white"/>
+    <text x="605" y="288" text-anchor="middle" font-size="9" fill="#aab">AP を選択して「選択したAPを測定」ボタンをタップ</text>
+
+    <!-- ═══════════════════════════════════════════════════
+         ② Supplicant 測定フェーズ
+    ═══════════════════════════════════════════════════ -->
+    <rect x="0" y="300" width="1210" height="18" fill="#f0f4fb"/>
+    <text x="605" y="313" text-anchor="middle" font-size="10" fill="#557" font-weight="bold">
+      ② Supplicant 測定フェーズ（AP 1台ずつ繰り返し）
+    </text>
+
+    <!-- loop ブラケット -->
+    <rect x="3" y="322" width="1204" height="372" fill="none" stroke="#b8c4dc" stroke-width="1.2" stroke-dasharray="5,3" rx="4"/>
+    <rect x="3" y="319" width="65" height="14" fill="#b8c4dc" rx="3"/>
+    <text x="35" y="330" text-anchor="middle" font-size="8.5" fill="#446" font-weight="bold">loop [各AP]</text>
+
+    <!-- ユーザ → measureForAp : 選択したAPを測定ボタン -->
+    <line x1="56" y1="338" x2="384" y2="338" stroke="#553366" stroke-width="1.8"/>
+    <polygon points="374,334 384,338 374,342" fill="#553366"/>
+    <text x="220" y="333" text-anchor="middle" font-size="9" fill="#553366" font-weight="bold">選択したAPを測定ボタン</text>
+
+    <!-- buildSpecifier ノートボックス -->
+    <rect x="308" y="351" width="310" height="42" fill="#fdf8ee" stroke="#b89020" stroke-width="1.1" rx="3"/>
+    <polygon points="610,351 618,351 618,359 610,359" fill="#b89020" opacity="0.35"/>
+    <text x="315" y="363" font-size="8.5" fill="#806010" font-weight="bold">buildSpecifier(ap)</text>
+    <line x1="308" y1="368" x2="618" y2="368" stroke="#b89020" stroke-width="0.7" stroke-dasharray="3,2"/>
+    <text x="315" y="379" font-size="8" fill="#443300">[API 33+]  securityTypesRaw で判定</text>
+    <text x="315" y="391" font-size="8" fill="#777755">[API 32-]  capabilitiesRaw を文字列解析</text>
+
+    <!-- withTimeoutOrNull アクティベーションバー（10秒）-->
+    <rect x="379" y="415" width="12" height="230" fill="rgba(180,40,40,0.10)" stroke="#cc3333" stroke-width="1.2" rx="2"/>
+    <text transform="translate(397,530) rotate(-90)" text-anchor="middle" font-size="7.5" fill="#cc3333" font-weight="bold">withTimeoutOrNull（最大 10秒 / AP）</text>
+
+    <!-- measureForAp → ConnectivityManager : requestNetwork(request, cb, Handler(Main), timeout=3秒) -->
+    <line x1="386" y1="416" x2="714" y2="416" stroke="#b07030" stroke-width="1.8"/>
+    <polygon points="704,412 714,416 704,420" fill="#b07030"/>
+    <text x="550" y="411" text-anchor="middle" font-size="9" fill="#b07030" font-weight="bold">requestNetwork(request, cb, Handler(Main), timeout=3秒)</text>
+
+    <!-- NO_ACTIVITY_TIMEOUT_MS 説明ノート（CM側） -->
+    <rect x="628" y="420" width="215" height="22" fill="#fff4e0" stroke="#c87800" stroke-width="1" rx="3"/>
+    <polygon points="628,420 636,420 636,428 628,428" fill="#c87800" opacity="0.4"/>
+    <text x="638" y="430" font-size="7.5" fill="#7a4800" font-weight="bold">NO_ACTIVITY_TIMEOUT_MS = 3秒</text>
+    <text x="638" y="439" font-size="7" fill="#7a4800">3秒無応答 → CM が onUnavailable() を自動発火</text>
+
+    <!-- ConnectivityManager ··→ wpa_supplicant : 内部（HAL経由） -->
+    <line x1="716" y1="453" x2="934" y2="453" stroke="#aaa" stroke-width="1.2" stroke-dasharray="5,3"/>
+    <polygon points="924,449 934,453 924,457" fill="#aaa"/>
+    <text x="825" y="448" text-anchor="middle" font-size="8.5" fill="#999">内部：WifiService / HAL 経由</text>
+
+    <!-- wpa_supplicant → WiFiDriver : 認証コマンド -->
+    <line x1="936" y1="477" x2="1044" y2="477" stroke="#7a5c48" stroke-width="1.5"/>
+    <polygon points="1034,473 1044,477 1034,481" fill="#7a5c48"/>
+    <text x="990" y="472" text-anchor="middle" font-size="9" fill="#7a5c48">認証コマンド</text>
+
+    <!-- WiFiDriver → AP : 電波 -->
+    <line x1="1046" y1="501" x2="1154" y2="501" stroke="#237038" stroke-width="1.5"/>
+    <polygon points="1144,497 1154,501 1144,505" fill="#237038"/>
+    <text x="1100" y="496" text-anchor="middle" font-size="9" fill="#237038">電波（Probe / Auth / Assoc）</text>
+
+    <!-- AP → WiFiDriver : 応答 -->
+    <line x1="1155" y1="523" x2="1046" y2="523" stroke="#237038" stroke-width="1.5"/>
+    <polygon points="1056,519 1046,523 1056,527" fill="#237038"/>
+    <text x="1100" y="518" text-anchor="middle" font-size="9" fill="#237038">応答</text>
+
+    <!-- wpa_supplicant → supplicantReceiver : STATE_CHANGED × 複数回 -->
+    <line x1="934" y1="546" x2="606" y2="546" stroke="#b86020" stroke-width="1.8"/>
+    <polygon points="616,542 606,546 616,550" fill="#b86020"/>
+    <text x="770" y="541" text-anchor="middle" font-size="9.5" fill="#b86020" font-weight="bold">SUPPLICANT_STATE_CHANGED_ACTION（DISCONNECTED）</text>
+
+    <line x1="934" y1="568" x2="606" y2="568" stroke="#b86020" stroke-width="1.8"/>
+    <polygon points="616,564 606,568 616,572" fill="#b86020"/>
+    <text x="770" y="563" text-anchor="middle" font-size="9.5" fill="#b86020" font-weight="bold">SUPPLICANT_STATE_CHANGED_ACTION（ASSOCIATING）</text>
+
+    <line x1="934" y1="590" x2="606" y2="590" stroke="#b86020" stroke-width="1.8"/>
+    <polygon points="616,586 606,590 616,594" fill="#b86020"/>
+    <text x="770" y="585" text-anchor="middle" font-size="9.5" fill="#b86020" font-weight="bold">SUPPLICANT_STATE_CHANGED_ACTION（ASSOCIATED / FOUR_WAY_HANDSHAKE / ...）</text>
+
+    <!-- ユーザ ··→ measureForAp : 中断ボタン（非同期・測定中いつでも可） -->
+    <line x1="56" y1="609" x2="384" y2="609" stroke="#553366" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <polygon points="374,605 384,609 374,613" fill="#553366"/>
+    <text x="220" y="604" text-anchor="middle" font-size="8.5" fill="#553366" font-weight="bold">中断ボタン</text>
+    <rect x="56" y="614" width="130" height="12" fill="#ede8f5" rx="2" stroke="#aa88cc" stroke-width="0.8"/>
+    <text x="121" y="624" text-anchor="middle" font-size="7.5" fill="#553366">stopRequested = true</text>
+
+    <!-- measureForAp → ConnectivityManager : unregisterNetworkCallback(cb) -->
+    <line x1="386" y1="634" x2="714" y2="634" stroke="#b07030" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <polygon points="704,630 714,634 704,638" fill="#b07030"/>
+    <text x="550" y="629" text-anchor="middle" font-size="9" fill="#b07030">unregisterNetworkCallback(cb)</text>
+
+    <!-- ConnectivityManager → cb : onAvailable / onUnavailable -->
+    <line x1="714" y1="654" x2="496" y2="654" stroke="#1d57b0" stroke-width="1.8"/>
+    <polygon points="506,650 496,654 506,658" fill="#1d57b0"/>
+    <text x="605" y="649" text-anchor="middle" font-size="9.5" fill="#1d57b0" font-weight="bold">onAvailable(network) / onUnavailable()</text>
+
+    <!-- loop 末尾注記 -->
+    <text x="605" y="682" text-anchor="middle" font-size="8.5" fill="#aab">300ms 待機後、次の AP へ（最大 10秒 / AP。無応答 3秒で onUnavailable 早期発火）</text>
+
+    <!-- 完了バー -->
+    <rect x="0" y="696" width="1210" height="20" fill="#f0f4fb"/>
+    <text x="605" y="710" text-anchor="middle" font-size="9.5" fill="#667">
+      全 AP 測定完了 → ap.copy(supplicantStates, finalState, elapsedMs) → JSON 保存 → サーバ送信
+    </text>
+
+  </svg>
+</div>
+</body>
+</html>

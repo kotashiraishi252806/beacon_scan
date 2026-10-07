@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>supplicant_final_state 一覧</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Hiragino Sans', 'Meiryo', 'Segoe UI', sans-serif;
+      background: #e8ecf2;
+      overflow: hidden;
+    }
+
+    #deck { width: 100vw; height: 100vh; position: relative; }
+
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      padding: 52px 80px 58px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease;
+      background: #f7f9fc;
+      color: #1a1e2e;
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide.cover   { background: #ffffff; color: #1a1e2e; }
+    .slide.section { background: #10294f; color: #eef2ff; }
+
+    .label {
+      font-size: 12px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: #1d57b0; margin-bottom: 10px;
+    }
+    .section .label { color: #7eb8ff; }
+
+    h2 {
+      font-size: 34px; font-weight: 900; color: #0d1f45;
+      line-height: 1.25; margin-bottom: 10px;
+    }
+    .cover h2   { color: #0d1f45; font-size: 40px; }
+    .section h2 { color: #eef2ff; font-size: 36px; }
+
+    .lead {
+      font-size: 16px; color: #445; line-height: 1.75;
+      margin-bottom: 28px; max-width: 800px;
+    }
+    .section .lead { color: rgba(255,255,255,0.65); }
+
+    .rule { border: none; border-top: 2px solid #dde3ee; margin: 0 0 24px; }
+
+    .hbox {
+      border-left: 5px solid #1d57b0;
+      background: #eef4ff; border-radius: 0 8px 8px 0;
+      padding: 14px 18px; margin-bottom: 14px;
+      font-size: 15px; color: #1a2040; line-height: 1.75;
+    }
+    .hbox.green  { border-color: #237038; background: #eef7f0; color: #1a3020; }
+    .hbox.orange { border-color: #b86020; background: #fdf3ea; color: #3a1a00; }
+    .hbox.red    { border-color: #b03030; background: #fdf0f0; color: #3a0a0a; }
+    .hbox.gray   { border-color: #889; background: #f2f3f6; color: #334; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th {
+      background: #1d57b0; color: white;
+      padding: 10px 16px; text-align: left;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    }
+    td {
+      padding: 10px 16px; color: #223;
+      border-bottom: 1px solid #e4e8f0; vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #fafbfd; }
+
+    /* 最終状態バッジ */
+    .fs {
+      font-family: 'Courier New', monospace; font-size: 12px;
+      padding: 3px 8px; border-radius: 4px; font-weight: 700;
+      display: inline-block; white-space: nowrap;
+    }
+    .fs-ok     { background: #d4edda; color: #155724; }
+    .fs-skip   { background: #e2e3f3; color: #383888; }
+    .fs-none   { background: #e9ecef; color: #495057; }
+    .fs-fail   { background: #f8d7da; color: #721c24; }
+    .fs-tout   { background: #fff3cd; color: #856404; }
+    .fs-cancel { background: #ede0f5; color: #553366; }
+
+    code {
+      font-family: 'Courier New', monospace; font-size: 12px;
+      background: #eef; color: #1d57b0;
+      padding: 1px 6px; border-radius: 4px;
+    }
+
+    .cols { display: flex; gap: 20px; }
+    .cols > * { flex: 1; }
+
+    .card {
+      background: white; border: 1px solid #dde3ee;
+      border-radius: 10px; padding: 18px 22px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 12px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: #1d57b0; margin-bottom: 10px;
+    }
+
+    #nav {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 16px;
+      background: rgba(13,31,69,0.85); backdrop-filter: blur(8px);
+      border-radius: 40px; padding: 10px 22px;
+    }
+    #nav button {
+      background: none; border: 1px solid rgba(255,255,255,0.35);
+      color: white; padding: 6px 18px; border-radius: 20px;
+      cursor: pointer; font-size: 13px; transition: all 0.2s;
+    }
+    #nav button:hover { background: rgba(255,255,255,0.15); }
+    #nav button:disabled { opacity: 0.25; cursor: default; }
+    #slide-counter { font-size: 12px; color: rgba(255,255,255,0.65); min-width: 54px; text-align: center; }
+
+    #progress {
+      position: fixed; top: 0; left: 0; height: 4px;
+      background: linear-gradient(90deg, #1d57b0, #4a9eff);
+      transition: width 0.3s ease; z-index: 100;
+    }
+    #hint {
+      position: fixed; top: 14px; right: 18px;
+      font-size: 11px; color: #aab; letter-spacing: 0.5px;
+    }
+
+    .flex1 { flex: 1; }
+    .mt8  { margin-top:  8px; }
+    .mt12 { margin-top: 12px; }
+    .mt16 { margin-top: 16px; }
+
+    /* 判定フローボックス */
+    .flow-box {
+      background: white; border: 1px solid #dde3ee; border-radius: 10px;
+      overflow: hidden; font-size: 13px;
+    }
+    .flow-row {
+      display: flex; align-items: stretch;
+      border-bottom: 1px solid #eef0f5;
+    }
+    .flow-row:last-child { border-bottom: none; }
+    .flow-cond {
+      flex: 0 0 340px; padding: 10px 16px;
+      background: #f4f6fb; border-right: 1px solid #e0e5ef;
+      font-family: 'Courier New', monospace; font-size: 12px;
+      color: #334; display: flex; align-items: center;
+    }
+    .flow-result {
+      flex: 1; padding: 10px 16px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .flow-note {
+      font-size: 11.5px; color: #667; line-height: 1.6;
+    }
+    .flow-header {
+      background: #1d57b0; color: white;
+      padding: 8px 16px; font-size: 12px; font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .priority {
+      flex-shrink: 0; width: 22px; height: 22px;
+      border-radius: 50%; background: #1d57b0; color: white;
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-right: 8px;
+    }
+    .priority.gray { background: #889; }
+  </style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="hint">← → でスライド移動</div>
+<div id="deck">
+
+<!-- ══════════════════════════
+     S1 背景・目的
+══════════════════════════ -->
+<div class="slide active" style="overflow-y: auto;">
+  <div class="label">背景・目的</div>
+  <h2>移動しながらサプリカント取得可能か？の検討</h2>
+  <hr class="rule">
+
+  <div class="hbox orange" style="font-size:14px;">
+    <strong>検討したいこと</strong><br>
+    移動しながら測定を行う場合、1 AP あたりの接続試行に使える時間は限られる。
+    タイムアウトを 15 s から 3 s に短縮する前後で、<code>COMPLETED</code> への到達率にどう影響するかを
+    既存データから検討する。
+  </div>
+
+  <div class="hbox" style="font-size:14px;">
+    <strong>調べること</strong><br>
+    finalstate と取得時間の関係を分析し、
+    「3 s でも十分 COMPLETED まで到達できるか、それとも 15 s 必要か」を見極める。
+  </div>
+
+  <div class="hbox green" style="font-size:14px;">
+    <strong>この資料の目的</strong><br>
+    finalstate と取得時間の関係を整理する。
+    その一環として、タイムアウト（OS タイムアウト 3 s・フォールバック 10 s）が発火したとき
+    どの finalstate が記録されるかを把握することで、データの分類基準を明確にする。
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S2 前提条件
+══════════════════════════ -->
+<div class="slide">
+  <div class="label">前提条件</div>
+  <h2>finalstate 分類を整理するために理解しておくべきこと</h2>
+  <hr class="rule">
+
+  <div style="flex:1; display:flex; flex-direction:column; gap:16px;">
+
+    <!-- 上半分 -->
+    <div style="flex:1; background:white; border:1px solid #dde3ee; border-radius:10px; padding:18px 22px;">
+      <div style="font-size:18px; font-weight:700; letter-spacing:1px; color:#1d57b0; margin-bottom:12px;">① アプリには 2 段階のタイムアウトがある</div>
+      <div class="cols">
+        <div>
+          <div style="font-size:12px; font-weight:700; color:#b07030; margin-bottom:6px;">OS タイムアウト（3 秒）</div>
+          <div style="font-size:13px; color:#334; line-height:1.8;">
+            <code>requestNetwork()</code> の第 4 引数に渡す値。<br>
+            3 秒後に OS が <code>onUnavailable()</code> をアプリに通知し、コルーチンが終了する。
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px; font-weight:700; color:#b03030; margin-bottom:6px;">フォールバックタイムアウト（10 秒）</div>
+          <div style="font-size:13px; color:#334; line-height:1.8;">
+            <code>withTimeoutOrNull(10_000L)</code> でコルーチン全体を包んでいる。<br>
+            OS タイムアウトが機能しない場合の保険。10 秒経過で強制終了する。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下半分 -->
+    <div style="flex:1; background:white; border:1px solid #dde3ee; border-radius:10px; padding:18px 22px;">
+      <div style="font-size:18px; font-weight:700; letter-spacing:1px; color:#1d57b0; margin-bottom:12px;">② onAvailable と onUnavailable の違い</div>
+      <div class="cols">
+        <div>
+          <div style="font-size:12px; font-weight:700; color:#237038; margin-bottom:6px;">onAvailable()</div>
+          <div style="font-size:13px; color:#334; line-height:1.8;">
+            <code>requestNetwork()</code> で要求したネットワークへの接続が確立したことを OS がアプリに通知するコールバック。<br>
+            このとき <code>finalState = "COMPLETED"</code> がセットされる。
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px; font-weight:700; color:#b03030; margin-bottom:6px;">onUnavailable()</div>
+          <div style="font-size:13px; color:#334; line-height:1.8;">
+            要求したネットワークへの接続ができなかったことを OS がアプリに通知するコールバック。<br>
+            OS タイムアウト（3 秒）経過後に発火する。<code>finalState</code> は変更されず、その後の判定フローへ進む。
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px; border:1px dashed #aab; border-radius:8px; padding:10px 14px; font-size:12px; color:#556; line-height:1.8;">
+        <strong style="color:#889;">AI 学習データによる補足（実機での動作を保証するものではない）</strong><br>
+        Android 公式仕様上、<code>onAvailable()</code> は要求したネットワークへの接続が確立しデータ通信が可能な状態になったときに発火する。
+        <code>onUnavailable()</code> は指定したタイムアウト時間内に要求を満たすネットワークが見つからなかった、または接続できなかったときに発火する。
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S3 判定フロー＋詳細
+══════════════════════════ -->
+<div class="slide" style="display:flex; flex-direction:column;">
+  <div class="label">判定ロジック</div>
+  <h2>finalstate 判定フロー（表）</h2>
+  <p style="font-size:12px; color:#667; margin-bottom:8px;">
+    <code>measureForAp()</code> 内 <code>when</code> 式。上から順に評価し、最初に一致した条件を採用する。
+  </p>
+  <hr class="rule">
+
+  <!-- 上半分：全条件の3列表 -->
+  <div style="flex:1; overflow-y:auto;">
+    <table style="font-size:13px;">
+      <tr>
+        <th style="width:32%;">条件式</th>
+        <th style="width:38%;">条件式の言語化</th>
+        <th style="width:30%;">最終的な状態</th>
+      </tr>
+      <tr>
+        <td><code>buildSpecifier() == null</code></td>
+        <td>
+          <code>buildSpecifier()</code> が <code>null</code> を返した
+          <div style="margin-top:5px; font-size:11px; color:#667; border-top:1px dashed #ccd; padding-top:4px;">
+            <span style="font-weight:700; color:#445;">解釈：</span>
+            <code>WifiNetworkSpecifier</code> を構築できないため <code>requestNetwork()</code> を呼ばず、接続試行を行わない。<br>
+            <span style="color:#889;">null になるのは① <code>ap.security == "WEP"</code>、② BSSID パース失敗、③ <code>builder.build()</code> 失敗のいずれか。</span>
+          </div>
+        </td>
+        <td><span class="fs fs-skip">SKIPPED</span></td>
+      </tr>
+      <tr>
+        <td><code>stopRequested &amp;&amp; finalState != "COMPLETED"</code></td>
+        <td>停止ボタンが押されており、かつfinalStateがCOMPLETEDではない</td>
+        <td><span class="fs fs-cancel">CANCELLED</span></td>
+      </tr>
+      <tr>
+        <td><code>finalState == "COMPLETED"</code></td>
+        <td><code>finalState</code> が <code>"COMPLETED"</code> に等しい</td>
+        <td><span class="fs fs-ok">COMPLETED</span></td>
+      </tr>
+      <tr>
+        <td><code>unavailableFired &amp;&amp; transitions.isEmpty()</code></td>
+        <td>
+          <code>onUnavailable()</code> が呼ばれた かつ <code>SUPPLICANT_STATE_CHANGED_ACTION</code> が 1 件も届かなかった
+          <div style="margin-top:5px; font-size:11px; color:#667; border-top:1px dashed #ccd; padding-top:4px;">
+            <span style="font-weight:700; color:#445;">解釈：</span>
+            wpa_supplicant が接続シーケンスを一切開始しなかった。
+            SUPPLICANT_STATE_CHANGED_ACTION は wpa_supplicant が状態遷移するたびに送出されるため、
+            0 件であることはシーケンス未開始を意味し、対象 AP を発見できなかったと解釈できる。
+          </div>
+        </td>
+        <td><span class="fs fs-none">NOT_FOUND</span></td>
+      </tr>
+      <tr style="background:#fff8f0;">
+        <td><code>transitions.isNotEmpty() &amp;&amp; last in {DISCONNECTED, INACTIVE, SCANNING}</code></td>
+        <td>Supplicant 遷移あり、かつ最後の状態が <code>DISCONNECTED</code> / <code>INACTIVE</code> / <code>SCANNING</code> のいずれか</td>
+        <td><span class="fs fs-fail">FAILED_AT_&lt;STATE&gt;</span> <span style="font-size:10px; color:#b07030;">▼詳細</span></td>
+      </tr>
+      <tr style="background:#fff8f0;">
+        <td><code>transitions.isNotEmpty() &amp;&amp; last not in 上記3つ</code></td>
+        <td>Supplicant 遷移あり、かつ最後の状態が上記3つ以外</td>
+        <td><span class="fs fs-tout">TIMEOUT_AT_&lt;STATE&gt;</span> <span style="font-size:10px; color:#b07030;">▼詳細</span></td>
+      </tr>
+      <tr>
+        <td><code>else</code></td>
+        <td>
+          <code>onUnavailable()</code> が呼ばれなかった かつ <code>SUPPLICANT_STATE_CHANGED_ACTION</code> が 1 件も届かなかった
+          <div style="margin-top:5px; font-size:11px; color:#667; border-top:1px dashed #ccd; padding-top:4px;">
+            <span style="font-weight:700; color:#445;">解釈：</span>
+            OS からも wpa_supplicant からも一切の応答がないまま タイムアウト（10 秒経過）した。
+          </div>
+        </td>
+        <td><span class="fs fs-fail">FAILED_AT_DIALOG_TIMEOUT</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- 下半分：④⑤の詳細 -->
+  <div style="flex:1; overflow-y:auto; margin-top:12px; border:2px solid #b07030; border-radius:8px; overflow:hidden;">
+    <div style="background:#b07030; color:white; padding:6px 14px; font-size:11px; font-weight:700;">
+      ▲ FAILED_AT_&lt;STATE&gt; / TIMEOUT_AT_&lt;STATE&gt; の詳細 — &lt;STATE&gt; に入りうる値
+    </div>
+    <table style="font-size:12px;">
+      <tr>
+        <th style="width:26%;">状態名</th>
+        <th style="width:26%;">プレフィックス</th>
+        <th>Supplicant 遷移リストの最後がこの状態だったとき</th>
+      </tr>
+      <tr>
+        <td><code>DISCONNECTED</code></td>
+        <td><span class="fs fs-fail" style="font-size:11px;">FAILED_AT_</span></td>
+        <td>Supplicant が DISCONNECTED を報告して終了した</td>
+      </tr>
+      <tr>
+        <td><code>INACTIVE</code></td>
+        <td><span class="fs fs-fail" style="font-size:11px;">FAILED_AT_</span></td>
+        <td>Supplicant が INACTIVE を報告して終了した</td>
+      </tr>
+      <tr>
+        <td><code>SCANNING</code></td>
+        <td><span class="fs fs-fail" style="font-size:11px;">FAILED_AT_</span></td>
+        <td>Supplicant が SCANNING を報告して終了した</td>
+      </tr>
+      <tr>
+        <td><code>AUTHENTICATING</code></td>
+        <td><span class="fs fs-tout" style="font-size:11px;">TIMEOUT_AT_</span></td>
+        <td>Supplicant が AUTHENTICATING を報告して終了した</td>
+      </tr>
+      <tr>
+        <td><code>ASSOCIATING</code></td>
+        <td><span class="fs fs-tout" style="font-size:11px;">TIMEOUT_AT_</span></td>
+        <td>Supplicant が ASSOCIATING を報告して終了した</td>
+      </tr>
+      <tr>
+        <td><code>ASSOCIATED</code></td>
+        <td><span class="fs fs-tout" style="font-size:11px;">TIMEOUT_AT_</span></td>
+        <td>Supplicant が ASSOCIATED を報告して終了した</td>
+      </tr>
+      <tr>
+        <td><code>FOUR_WAY_HANDSHAKE</code></td>
+        <td><span class="fs fs-tout" style="font-size:11px;">TIMEOUT_AT_</span></td>
+        <td>Supplicant が FOUR_WAY_HANDSHAKE を報告して終了した</td>
+      </tr>
+      <tr>
+        <td><code>GROUP_HANDSHAKE</code></td>
+        <td><span class="fs fs-tout" style="font-size:11px;">TIMEOUT_AT_</span></td>
+        <td>Supplicant が GROUP_HANDSHAKE を報告して終了した</td>
+      </tr>
+      <tr>
+        <td style="color:#aaa;"><code>DORMANT など</code></td>
+        <td><span class="fs fs-tout" style="font-size:11px;">TIMEOUT_AT_</span></td>
+        <td>上記以外の SupplicantState 値（実測での出現は未確認）</td>
+      </tr>
+    </table>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════
+     S4 判定フロー可視化（全7種）
+══════════════════════════ -->
+<div class="slide" style="overflow-y:auto;">
+  <div class="label">判定フロー可視化（全 7 種）</div>
+  <h2>measureForAp() の finalstate 決定フロー</h2>
+  <p style="font-size:12px; color:#667; margin-bottom:8px;">
+    コードの評価順序に対応。条件が満たされた時点で右の最終状態へ分岐し終了。
+  </p>
+  <hr class="rule">
+
+  <div style="flex:1; overflow-y:auto;">
+    <div style="max-width:860px; margin:0 auto; padding-bottom:16px;">
+
+      <!-- START -->
+      <div style="display:flex; justify-content:center;">
+        <div style="background:#1d57b0; color:white; border-radius:8px; padding:7px 28px; font-size:13px; font-weight:700; font-family:'Courier New',monospace;">
+          AP 1 件の測定開始
+        </div>
+      </div>
+      <div style="display:flex; justify-content:center;"><div style="width:2px; height:12px; background:#aab;"></div></div>
+
+      <!-- D1: buildSpecifier == null -->
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="flex:1; background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; color:#3a1a00;">
+          ◇ <code>buildSpecifier()</code> が <code>null</code> を返したか？
+        </div>
+        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+          <div style="height:2px; width:16px; background:#aab;"></div>
+          <span style="font-size:11px; font-weight:700; color:#b07030;">YES</span>
+          <div style="height:2px; width:8px; background:#aab;"></div>
+          <span class="fs fs-skip">SKIPPED</span>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:center; align-items:center; gap:4px; height:22px;">
+        <div style="width:2px; height:100%; background:#aab;"></div>
+        <span style="font-size:10px; font-weight:700; color:#889; margin-left:4px;">NO</span>
+      </div>
+
+      <!-- ACTION: requestNetwork / wait -->
+      <div style="background:#eef4ff; border:2px solid #1d57b0; border-radius:8px; padding:8px 16px; font-size:12px; font-weight:600; color:#0d1f45;">
+        <code>requestNetwork()</code> 呼び出し → <code>withTimeoutOrNull(10 s)</code> 内で待機<br>
+        <span style="font-size:11px; font-weight:400; color:#667;">3 s OS timeout → <code>onUnavailable()</code> 発火 ／ 何も来なければ 10 s 経過で null 返却</span>
+      </div>
+      <div style="display:flex; justify-content:center;"><div style="width:2px; height:12px; background:#aab;"></div></div>
+
+      <!-- D2: stopRequested -->
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="flex:1; background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; color:#3a1a00;">
+          ◇ <code>stopRequested</code> == true かつ <code>finalState</code> != <code>"COMPLETED"</code> ?
+        </div>
+        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+          <div style="height:2px; width:16px; background:#aab;"></div>
+          <span style="font-size:11px; font-weight:700; color:#b07030;">YES</span>
+          <div style="height:2px; width:8px; background:#aab;"></div>
+          <span class="fs fs-cancel">CANCELLED</span>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:center; align-items:center; gap:4px; height:22px;">
+        <div style="width:2px; height:100%; background:#aab;"></div>
+        <span style="font-size:10px; font-weight:700; color:#889; margin-left:4px;">NO</span>
+      </div>
+
+      <!-- D3: finalState == COMPLETED -->
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="flex:1; background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; color:#3a1a00;">
+          ◇ <code>finalState</code> == <code>"COMPLETED"</code> ?
+        </div>
+        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+          <div style="height:2px; width:16px; background:#aab;"></div>
+          <span style="font-size:11px; font-weight:700; color:#b07030;">YES</span>
+          <div style="height:2px; width:8px; background:#aab;"></div>
+          <span class="fs fs-ok">COMPLETED</span>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:center; align-items:center; gap:4px; height:22px;">
+        <div style="width:2px; height:100%; background:#aab;"></div>
+        <span style="font-size:10px; font-weight:700; color:#889; margin-left:4px;">NO</span>
+      </div>
+
+      <!-- D4: transitions.isNotEmpty() -->
+      <div style="background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; color:#3a1a00; text-align:center;">
+        ◇ <code>SUPPLICANT_STATE_CHANGED_ACTION</code> が 1 件以上届いたか？
+      </div>
+
+      <!-- D4 two-column branch -->
+      <div style="display:flex; width:100%; border-top:2px solid #aab;">
+
+        <!-- YES column -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:0 10px 8px; border-right:2px dashed #ccd;">
+          <div style="width:2px; height:10px; background:#aab;"></div>
+          <div style="font-size:12px; font-weight:700; color:#237038; margin-bottom:6px;">YES（transitions あり）</div>
+          <div style="background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:7px 14px; font-size:12px; font-weight:700; color:#3a1a00; text-align:center; width:100%;">
+            ◇ <code>transitions</code> の末尾 state は？
+          </div>
+          <div style="width:100%; display:flex; border-top:2px solid #aab;">
+            <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:4px 4px 6px; border-right:1px dashed #ccd;">
+              <div style="width:2px; height:8px; background:#aab;"></div>
+              <div style="font-size:11px; font-weight:700; color:#721c24; text-align:center; line-height:1.7; margin-bottom:4px;">DISCONNECTED<br>INACTIVE<br>SCANNING</div>
+              <div style="width:2px; height:8px; background:#aab;"></div>
+              <span class="fs fs-fail">FAILED_AT_&lt;STATE&gt;</span>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:4px 4px 6px;">
+              <div style="width:2px; height:8px; background:#aab;"></div>
+              <div style="font-size:11px; font-weight:700; color:#856404; text-align:center; line-height:1.7; margin-bottom:4px;">AUTHENTICATING<br>ASSOCIATING 等</div>
+              <div style="width:2px; height:8px; background:#aab;"></div>
+              <span class="fs fs-tout">TIMEOUT_AT_&lt;STATE&gt;</span>
+            </div>
+          </div>
+          <div style="margin-top:6px; font-size:11px; color:#889; border:1px dashed #ccd; border-radius:6px; padding:3px 8px; text-align:center; line-height:1.6;">
+            3 s OS timeout 後・10 s fallback 後いずれでも起こりうる
+          </div>
+        </div>
+
+        <!-- NO column -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:0 10px 8px;">
+          <div style="width:2px; height:10px; background:#aab;"></div>
+          <div style="font-size:12px; font-weight:700; color:#b03030; margin-bottom:6px;">NO（transitions 空）</div>
+          <div style="background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:7px 14px; font-size:12px; font-weight:700; color:#3a1a00; text-align:center; width:100%;">
+            ◇ <code>onUnavailable()</code> が呼ばれたか？<br>
+            <span style="font-size:10px; font-weight:400;">（= 3 s OS timeout が発火したか）</span>
+          </div>
+          <div style="width:100%; display:flex; border-top:2px solid #aab;">
+            <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:4px 4px 6px; border-right:1px dashed #ccd;">
+              <div style="width:2px; height:8px; background:#aab;"></div>
+              <div style="font-size:11px; font-weight:700; color:#237038; text-align:center; line-height:1.7; margin-bottom:4px;">YES<br>（3 s OS timeout）</div>
+              <div style="width:2px; height:8px; background:#aab;"></div>
+              <span class="fs fs-none">NOT_FOUND</span>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:4px 4px 6px;">
+              <div style="width:2px; height:8px; background:#aab;"></div>
+              <div style="font-size:11px; font-weight:700; color:#b03030; text-align:center; line-height:1.7; margin-bottom:4px;">NO<br>（10 s fallback）</div>
+              <div style="width:2px; height:8px; background:#aab;"></div>
+              <span class="fs fs-fail" style="font-size:11px; white-space:normal; text-align:center; line-height:1.4;">FAILED_AT_<br>DIALOG_TIMEOUT</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- D4 branch -->
+
+    </div>
+  </div>
+</div>
+
+</div><!-- #deck -->
+
+<div id="nav">
+  <button id="prev">←</button>
+  <span id="slide-counter"></span>
+  <button id="next">→</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let current = 0;
+
+  function show(n) {
+    slides[current].classList.remove('active');
+    current = (n + total) % total;
+    slides[current].classList.add('active');
+    document.getElementById('slide-counter').textContent = (current + 1) + ' / ' + total;
+    document.getElementById('progress').style.width = ((current + 1) / total * 100) + '%';
+    document.getElementById('prev').disabled = current === 0;
+    document.getElementById('next').disabled = current === total - 1;
+  }
+
+  document.getElementById('prev').addEventListener('click', () => show(current - 1));
+  document.getElementById('next').addEventListener('click', () => show(current + 1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') show(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   show(current - 1);
+  });
+
+  show(0);
+</script>
+</body>
+</html>

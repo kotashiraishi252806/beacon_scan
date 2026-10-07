@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supplicant測定機能 — 現状と課題（2026-09-10）</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue-dark: #0d1f45;
+      --blue-mid:  #1d57b0;
+      --blue-light:#e8f0fb;
+      --green:     #1a7f5a;
+      --green-bg:  #eaf7f2;
+      --red:       #c0392b;
+      --red-bg:    #fdf2f0;
+      --yellow:    #b8860b;
+      --yellow-bg: #fef9e7;
+      --gray:      #5a6272;
+      --border:    #d4dae6;
+    }
+
+    body {
+      font-family: 'Hiragino Sans', 'Meiryo', 'Segoe UI', sans-serif;
+      background: #eef1f7;
+      color: #1a1e2e;
+      line-height: 1.75;
+    }
+
+    /* ─── layout ─── */
+    .page { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* ─── cover ─── */
+    .cover {
+      background: var(--blue-dark);
+      color: #eef2ff;
+      padding: 52px 48px;
+      border-radius: 12px;
+      margin-bottom: 36px;
+    }
+    .cover .tag {
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: #7eb8ff; margin-bottom: 16px;
+    }
+    .cover h1 { font-size: 30px; font-weight: 900; line-height: 1.3; margin-bottom: 12px; }
+    .cover .sub { font-size: 15px; color: rgba(255,255,255,0.65); }
+
+    /* ─── section ─── */
+    section { margin-bottom: 36px; }
+    .sec-header {
+      display: flex; align-items: center; gap: 10px;
+      border-bottom: 2px solid var(--blue-mid);
+      padding-bottom: 8px; margin-bottom: 20px;
+    }
+    .sec-num {
+      background: var(--blue-mid); color: #fff;
+      font-size: 12px; font-weight: 800;
+      padding: 2px 8px; border-radius: 4px;
+    }
+    .sec-header h2 { font-size: 20px; font-weight: 800; color: var(--blue-dark); }
+
+    /* ─── cards ─── */
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 26px;
+      margin-bottom: 16px;
+    }
+    .card.green  { border-left: 5px solid var(--green);  background: var(--green-bg); }
+    .card.red    { border-left: 5px solid var(--red);    background: var(--red-bg); }
+    .card.yellow { border-left: 5px solid var(--yellow); background: var(--yellow-bg); }
+    .card.blue   { border-left: 5px solid var(--blue-mid); background: var(--blue-light); }
+
+    .card h3 { font-size: 15px; font-weight: 800; margin-bottom: 8px; color: var(--blue-dark); }
+    .card.green  h3 { color: var(--green); }
+    .card.red    h3 { color: var(--red); }
+    .card.yellow h3 { color: var(--yellow); }
+
+    p { font-size: 14px; color: #333; margin-bottom: 8px; }
+    p:last-child { margin-bottom: 0; }
+
+    ul, ol { font-size: 14px; color: #333; padding-left: 1.4em; }
+    li { margin-bottom: 4px; }
+
+    /* ─── two-col ─── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ─── stats bar ─── */
+    .stats-row {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 640px) { .stats-row { grid-template-columns: 1fr 1fr; } }
+    .stat-box {
+      background: #fff; border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px 12px; text-align: center;
+    }
+    .stat-box .num { font-size: 28px; font-weight: 900; color: var(--blue-mid); }
+    .stat-box .label { font-size: 11px; color: var(--gray); margin-top: 2px; }
+
+    /* ─── table ─── */
+    .tbl-wrap { overflow-x: auto; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      background: var(--blue-dark); color: #eef2ff;
+      padding: 8px 12px; text-align: left; font-weight: 700;
+    }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #f5f7fb; }
+
+    /* ─── badge ─── */
+    .badge {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 20px; margin-right: 4px;
+    }
+    .badge.g { background: #d4edda; color: #155724; }
+    .badge.r { background: #f8d7da; color: #721c24; }
+    .badge.y { background: #fff3cd; color: #856404; }
+    .badge.b { background: #d0e8ff; color: #0c3d7a; }
+
+    /* ─── flow diagram ─── */
+    .flow {
+      display: flex; align-items: center; flex-wrap: wrap;
+      gap: 6px; margin: 12px 0; font-size: 13px;
+    }
+    .flow-box {
+      background: var(--blue-dark); color: #fff;
+      padding: 6px 14px; border-radius: 6px; font-weight: 700;
+    }
+    .flow-box.gray  { background: #8090a8; }
+    .flow-box.green { background: var(--green); }
+    .flow-box.red   { background: var(--red); }
+    .flow-arr { color: var(--gray); font-size: 18px; }
+
+    /* ─── bar chart ─── */
+    .bar-row { margin-bottom: 10px; }
+    .bar-label {
+      display: flex; justify-content: space-between;
+      font-size: 12px; color: #444; margin-bottom: 3px;
+    }
+    .bar-track { background: #dde3ee; border-radius: 4px; height: 18px; }
+    .bar-fill  { border-radius: 4px; height: 18px; }
+    .bar-fill.b { background: var(--blue-mid); }
+    .bar-fill.r { background: var(--red); }
+    .bar-fill.g { background: var(--green); }
+    .bar-fill.y { background: var(--yellow); }
+
+    /* ─── callout ─── */
+    .callout {
+      background: var(--blue-light);
+      border-left: 4px solid var(--blue-mid);
+      border-radius: 6px; padding: 14px 18px;
+      font-size: 14px; color: #1a1e2e; margin-bottom: 16px;
+    }
+    .callout strong { color: var(--blue-mid); }
+
+    code {
+      font-family: 'Menlo', 'Consolas', monospace;
+      background: #e8edf5; padding: 1px 5px; border-radius: 3px;
+      font-size: 12px;
+    }
+
+    /* ─── severity tag ─── */
+    .sev { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+    .sev.high   { background: var(--red);    color: #fff; }
+    .sev.mid    { background: var(--yellow); color: #fff; }
+    .sev.low    { background: #888;          color: #fff; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- COVER -->
+  <div class="cover">
+    <h1>サプリカントの状態　測定機能 現状と課題</h1>
+  </div>
+
+  <!-- 1. 概要 -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">1</span>
+      <h2>何を実現しようとしているのか</h2>
+    </div>
+
+    <div class="card blue" style="margin-bottom:14px;">
+      <h3>目的：無線LAN利用環境の把握</h3>
+      <p>
+        無線LANはインターネット接続可能エリアを広範囲にカバーできる反面、<strong>どこで使えてどこで使えないかを把握することが難しい</strong>。
+        電波が届いていてもサービスが利用できるとは限らないため、AP設置者はサービス利用可否を網羅的に把握する必要がある。
+      </p>
+    </div>
+
+    <div class="card blue">
+      <h3>手段：サプリカント状態の取得</h3>
+      <p>
+        サービス利用可否の指標として <strong>サプリカントの状態</strong> を検討。
+        サプリカントはWi-Fi接続時の認証処理担うソフトウェアであり、AndroidOSは認証処理の状態遷移を取得できる。それがサプリカントの状態である。
+        サービス利用可否を評価する指標としてRSSIより詳細に利用環境を把握できる。
+      </p>
+    </div>
+  </section>
+
+  <!-- 2. 実装アプローチ -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">2</span>
+      <h2>実装アプローチと測定方法</h2>
+    </div>
+
+    <div class="card">
+      <h3>接続施行の仕組み：requestNetwork() による接続試行</h3>
+      <p>Android標準API <code>ConnectivityManager.requestNetwork()</code> を用いて、スキャンで検出した各APへの接続をOSに依頼する。アプリはOSへのトリガーを呼ぶだけであり、実際の接続処理・ダイアログ表示はすべてOS側が担当する。</p>
+      <p style="margin-top:10px; font-size:13px; color:#667;">詳細なシーケンスは <strong>803サプリカント取得フロー.html</strong> を参照。</p>
+
+      <div style="margin-top:20px; background:#f5f7fb; border:1px solid var(--border); border-radius:8px; padding:18px;">
+        <div style="font-size:13px; font-weight:800; color:var(--blue-dark); margin-bottom:14px;">主要API</div>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div style="border: 1px solid var(--border); border-radius:8px; padding:14px; background:#fff;">
+            <div style="font-size:11px; font-weight:800; letter-spacing:1px; color:var(--blue-mid); margin-bottom:10px;">スキャン</div>
+            <p style="margin-bottom:4px;"><span class="badge b">メソッド</span> <code>WifiManager.startScan()</code></p>
+            <p style="font-size:13px; color:var(--gray); margin-bottom:12px;">周辺APのスキャンをOSに要求する。</p>
+            <p style="margin-bottom:4px;"><span class="badge b">クラス</span> <code>ScanResult</code></p>
+            <p style="font-size:13px; color:var(--gray);">スキャンで検出された1台のAPの情報（BSSID・SSID・RSSI・セキュリティ等）が格納されるオブジェクト。</p>
+          </div>
+          <div style="border: 1px solid var(--border); border-radius:8px; padding:14px; background:#fff;">
+            <div style="font-size:11px; font-weight:800; letter-spacing:1px; color:var(--blue-mid); margin-bottom:10px;">Supplicant取得</div>
+            <p style="margin-bottom:4px;"><span class="badge b">メソッド</span> <code>ConnectivityManager.requestNetwork()</code></p>
+            <p style="font-size:13px; color:var(--gray); margin-bottom:12px;">指定したAPへの接続をOSに依頼する。実際の接続処理・認証はOS任せ。</p>
+            <p style="margin-bottom:4px;"><span class="badge b">クラス</span> <code>SupplicantState</code></p>
+            <p style="font-size:13px; color:var(--gray); margin-bottom:10px;">認証処理の各段階を表すenum。DISCONNECTED・ASSOCIATING・FOUR_WAY_HANDSHAKE・COMPLETED など。<code>SUPPLICANT_STATE_CHANGED_ACTION</code> ブロードキャストで順次通知される。</p>
+            <p style="font-size:13px; color:var(--gray);">なお <code>WifiInfo.getSupplicantState()</code> でも状態取得は可能だが、これはその瞬間の状態を1回取得するポーリング型であり、遷移の全ステップを記録できない。本アプリではブロードキャスト受信による状態変化の逐次取得を採用している。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>測定方法</h3>
+
+      <div style="margin-top:14px; display:flex; flex-direction:column; gap:12px;">
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px; background:#fff;">
+          <p style="margin-bottom:6px;"><strong>サプリカント状態取得（AP）</strong></p>
+          <p style="font-size:13px; color:var(--gray);">スキャンで検出されたAP単位で接続試行を行い、Supplicant状態遷移を記録する。</p>
+        </div>
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px; background:#fff;">
+          <p style="margin-bottom:6px;"><strong>サプリカント状態取得（SSID）</strong></p>
+          <p style="font-size:13px; color:var(--gray);">ユーザーが選択したSSIDに紐づくAP（BSSID）に対して接続試行を行う。複数地点を移動しながらセッション型で繰り返し測定する。</p>
+        </div>
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px; background:#fff;">
+          <p style="margin-bottom:6px;"><strong>サプリカント状態取得（セキュリティ規格）</strong></p>
+          <p style="font-size:13px; color:var(--gray);">セキュリティ規格（WPA2・WPA3等）ごとにAPをグルーピングし、規格単位でSupplicant状態遷移のパターンを取得する。</p>
+        </div>
+      </div>
+
+      <div style="margin-top:20px; background:#f5f7fb; border:1px solid var(--border); border-radius:8px; padding:16px;">
+        <div style="font-size:13px; font-weight:800; color:var(--blue-dark); margin-bottom:12px;">3つの測定方法に共通する要素</div>
+        <ul style="font-size:13px; color:var(--gray); display:flex; flex-direction:column; gap:8px;">
+          <li><strong>AP単位の順次接続試行</strong>　— 測定対象のAPに対して1台ずつ順番に接続試行を行う。並列処理は行わない。</li>
+          <li><strong>AP単位のタイムアウト</strong>　— 1台あたり最大10秒待機。3秒間OSから応答がなければ <code>onUnavailable()</code> が自動発火し次のAPへ進む。</li>
+        </ul>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- 3. 実測データ -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">3</span>
+      <h2>測定データから確認したこと</h2>
+    </div>
+
+    <div class="card">
+      <h3>サプリカント状態取得（SSID）</h3>
+      <p style="font-size:13px; color:var(--gray); margin-bottom:14px;">対象SSID：SENDAI_free_Wi-Fi（Open）　測定場所：仙台駅</p>
+      <p style="font-size:12px; font-weight:800; color:var(--blue-mid); margin-bottom:6px;">分析対象データ</p>
+      <div class="tbl-wrap" style="margin-bottom:16px;">
+        <table>
+          <tr><th>label</th><th>端末</th></tr>
+          <tr><td>2026/09/10 17:46~18:03 仙台駅</td><td>ASUS I006D</td></tr>
+          <tr><td>2026/09/10 17:47~18:04 仙台駅</td><td>motorola edge 40 neo</td></tr>
+          <tr><td>2026/09/14 18:09~18:24 仙台駅</td><td>ASUS I006D</td></tr>
+          <tr><td>2026/09/14 18:09~18:24 仙台駅</td><td>motorola edge 40 neo</td></tr>
+          <tr><td>2026/09/15 12:23~12:40 仙台駅雨</td><td>ASUS I006D</td></tr>
+          <tr><td>2026/09/15 12:23~12:40 仙台駅雨</td><td>motorola edge 40 neo</td></tr>
+          <tr><td>2026/09/15 19:03~19:21 仙台駅雨</td><td>ASUS I006D</td></tr>
+          <tr><td>2026/09/15 19:04~19:22 仙台駅雨</td><td>motorola edge 40 neo</td></tr>
+          <tr><td>2026/09/16 07:54~08:04 仙台駅</td><td>ASUS I006D</td></tr>
+          <tr><td>2026/09/16 07:54~08:04 仙台駅</td><td>motorola edge 40 neo</td></tr>
+        </table>
+      </div>
+      <p style="font-size:12px; font-weight:800; color:var(--blue-mid); margin-bottom:6px;">結果</p>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>端末</th><th>セッション数</th><th>接続試行総件数</th><th>COMPLETED到達件数</th></tr>
+          <tr><td>ASUS I006D</td><td>5</td><td>583</td><td>286（約49%）</td></tr>
+          <tr><td>motorola edge 40 neo</td><td>5</td><td>493</td><td>341（約69%）</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>サプリカント状態取得（セキュリティ規格）</h3>
+      <p style="font-size:13px; color:var(--gray); margin-bottom:14px;">測定場所：仙台駅　取得規格：Open / WPA/WPA2-PSK / WPA2-PSK / WPA2-EAP / WPA3-SAE</p>
+      <p style="font-size:12px; font-weight:800; color:var(--blue-mid); margin-bottom:6px;">分析対象データ</p>
+      <div class="tbl-wrap" style="margin-bottom:16px;">
+        <table>
+          <tr><th>label</th><th>端末</th></tr>
+          <tr><td>2026/09/16 18:44~18:57 仙台駅雨テスト</td><td>ASUS I006D</td></tr>
+          <tr><td>2026/09/16 18:45~18:58 仙台駅雨テスト</td><td>motorola edge 40 neo</td></tr>
+          <tr><td>2026/09/17 12:23~12:36 仙台駅</td><td>ASUS I006D</td></tr>
+          <tr><td>2026/09/17 12:23~12:36 仙台駅</td><td>motorola edge 40 neo</td></tr>
+          <tr><td>2026/09/18 10:23~10:35 仙台駅</td><td>ASUS I006D</td></tr>
+          <tr><td>2026/09/18 10:23~10:35 仙台駅</td><td>motorola edge 40 neo</td></tr>
+        </table>
+      </div>
+      <p style="font-size:12px; font-weight:800; color:var(--blue-mid); margin-bottom:6px;">結果</p>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>端末</th><th>セッション数</th><th>取得できた規格</th></tr>
+          <tr><td>ASUS I006D</td><td>3</td><td>Open / WPA/WPA2-PSK / WPA2-PSK / WPA2-EAP / WPA3-SAE</td></tr>
+          <tr><td>motorola edge 40 neo</td><td>3</td><td>Open / WPA/WPA2-PSK / WPA2-PSK / WPA2-EAP / WPA3-SAE</td></tr>
+        </table>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- 4. できていること -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">4</span>
+      <h2>現時点でできていること</h2>
+    </div>
+
+  </section>
+
+  <!-- 5. 課題 -->
+  <section>
+    <div class="sec-header">
+      <span class="sec-num">5</span>
+      <h2>課題</h2>
+    </div>
+  </section>
+
+
+  <div style="text-align:center; font-size:12px; color:#aaa; margin-top:40px;">
+    beacon_scan プロジェクト ／ 2026-09-10
+  </div>
+
+</div>
+</body>
+</html>
