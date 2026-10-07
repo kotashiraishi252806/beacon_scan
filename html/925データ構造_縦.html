@@ -40,6 +40,10 @@ h1 { font-size: 20px; color: #223; margin-bottom: 6px; }
 .h-legend  { background: #555; }
 .h-flow    { background: #4a3080; }
 .h-example { background: #1a6030; }
+.h-simple    { background: #556070; }
+.h-conn-ap   { background: #2d5fa8; }
+.h-conn-ssid { background: #1a7060; }
+.h-conn-sec  { background: #6a3070; }
 
 /* ─── フィールド表 ─── */
 .field-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -512,65 +516,202 @@ h1 { font-size: 20px; color: #223; margin-bottom: 6px; }
     </div>
   </div>
 
-  <!-- JSON サンプル -->
+  <!-- ⑦ 簡易測定モードのデータ構造 -->
   <div class="card">
-    <div class="card-header h-example">⑦ JSON サンプル（1スキャン・AP 2台の例）</div>
+    <div class="card-header h-simple">⑦ 簡易測定モードのデータ構造</div>
     <div class="card-body">
+      <p style="font-size:11.5px;color:#556;margin-bottom:8px;">
+        スキャン結果のみを保存するモード。接続試行は行わないため AP 一覧・電波情報のみ記録します。
+        <code>pending_simple_scans.json</code> に蓄積されます。
+      </p>
+      <p style="font-size:11px;background:#f4f5f8;border-left:3px solid #99a;padding:6px 10px;margin-bottom:10px;border-radius:0 4px 4px 0;color:#556;">
+        <code>access_points</code> の各要素に <code>supplicant_*</code> フィールドは含まれません。それ以外のフィールド構成（scan_id・device・label・location）は他モードと共通です。
+      </p>
+      <div class="json-block">[
+  {
+    <span class="jk">"scan_id"</span>:     <span class="js">"a1b2c3d4-…"</span>,
+    <span class="jk">"device_id"</span>:   <span class="js">"9e8d7c6b-…"</span>,
+    <span class="jk">"device"</span>: { <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>, <span class="jk">"model"</span>: <span class="js">"Pixel 8"</span>, <span class="jk">"android_api"</span>: <span class="jn">34</span> },
+    <span class="jk">"scanned_at"</span>:  <span class="js">"2025-09-25T14:30:00"</span>,
+    <span class="jk">"label"</span>:       <span class="js">""</span>,
+    <span class="jk">"location"</span>: { <span class="jk">"latitude"</span>: <span class="jn">35.68123</span>, <span class="jk">"longitude"</span>: <span class="jn">139.76543</span>, <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span> },
+    <span class="jk">"access_points"</span>: [
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>:             [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>:              <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>:          <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>
+      },
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>:             [], <span class="jk">"rssi_dbm"</span>: <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>:              <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>:          <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>
+      }
+    ]
+  }
+]</div>
+    </div>
+  </div>
+
+  <!-- ⑧ 接続試行（AP単位）のデータ構造 -->
+  <div class="card">
+    <div class="card-header h-conn-ap">⑧ 接続試行（AP単位）のデータ構造</div>
+    <div class="card-body">
+      <p style="font-size:11.5px;color:#556;margin-bottom:8px;">
+        各 AP を個別に選択して接続試行を行うモード。<code>pending_scans.json</code> に蓄積されます。
+      </p>
+      <p style="font-size:11px;background:#f4f5f8;border-left:3px solid #99a;padding:6px 10px;margin-bottom:10px;border-radius:0 4px 4px 0;color:#556;">
+        <code>access_points</code> の全要素にサプリカント測定フィールド（<code>supplicant_states</code> / <code>supplicant_final_state</code> / <code>supplicant_elapsed_ms</code>）が付与されます。フィールドの詳細は ④⑤ を参照してください。
+      </p>
       <div class="json-block">[
   {
     <span class="jk">"scan_id"</span>:     <span class="js">"f3a2b1c0-…"</span>,
     <span class="jk">"device_id"</span>:   <span class="js">"9e8d7c6b-…"</span>,
-    <span class="jk">"device"</span>: {
-      <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>,
-      <span class="jk">"model"</span>:        <span class="js">"Pixel 8"</span>,
-      <span class="jk">"android_api"</span>: <span class="jn">34</span>
-    },
+    <span class="jk">"device"</span>: { <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>, <span class="jk">"model"</span>: <span class="js">"Pixel 8"</span>, <span class="jk">"android_api"</span>: <span class="jn">34</span> },
     <span class="jk">"scanned_at"</span>:  <span class="js">"2025-09-25T14:30:00"</span>,
     <span class="jk">"label"</span>:       <span class="js">""</span>,
-    <span class="jk">"location"</span>: {
-      <span class="jk">"latitude"</span>:   <span class="jn">35.68123</span>,
-      <span class="jk">"longitude"</span>:  <span class="jn">139.76543</span>,
-      <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span>
-    },
+    <span class="jk">"location"</span>: { <span class="jk">"latitude"</span>: <span class="jn">35.68123</span>, <span class="jk">"longitude"</span>: <span class="jn">139.76543</span>, <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span> },
     <span class="jk">"access_points"</span>: [
       {
-        <span class="jk">"bssid"</span>:              <span class="js">"aa:bb:cc:11:22:33"</span>,
-        <span class="jk">"mld_mac_address"</span>:   <span class="jnull">null</span>,
-        <span class="jk">"oui"</span>:               <span class="js">"aa:bb:cc"</span>,
-        <span class="jk">"ssids"</span>:            [<span class="js">"MyWifi"</span>],
-        <span class="jk">"rssi_dbm"</span>:         <span class="jn">-58</span>,
-        <span class="jk">"frequency_mhz"</span>:    <span class="jn">5180</span>,
-        <span class="jk">"band"</span>:             <span class="js">"5GHz"</span>,
-        <span class="jk">"channel_width_mhz"</span>:<span class="jn">80</span>,
-        <span class="jk">"wifi_standard"</span>:    <span class="js">"802.11ax"</span>,
-        <span class="jk">"wifi_standard_code"</span>:<span class="jn">6</span>,
-        <span class="jk">"security"</span>:         <span class="js">"WPA2"</span>,
-        <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>,
-        <span class="jk">"supplicant_states"</span>:[
-          <span class="js">"DISCONNECTED"</span>, <span class="js">"ASSOCIATING"</span>,
-          <span class="js">"ASSOCIATED"</span>, <span class="js">"FOUR_WAY_HANDSHAKE"</span>,
-          <span class="js">"DISCONNECTED"</span>
+        <span class="jk">"bssid"</span>:               <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>:             [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>:              <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>:          <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>,
+        <span class="jk">"supplicant_states"</span>: [
+          <span class="js">"DISCONNECTED"</span>, <span class="js">"ASSOCIATING"</span>, <span class="js">"ASSOCIATED"</span>,
+          <span class="js">"FOUR_WAY_HANDSHAKE"</span>, <span class="js">"DISCONNECTED"</span>
         ],
         <span class="jk">"supplicant_final_state"</span>: <span class="js">"FAILED_AT_DISCONNECTED"</span>,
         <span class="jk">"supplicant_elapsed_ms"</span>:  <span class="jn">2840</span>
       },
       {
-        <span class="jk">"bssid"</span>:              <span class="js">"dd:ee:ff:44:55:66"</span>,
-        <span class="jk">"mld_mac_address"</span>:   <span class="jnull">null</span>,
-        <span class="jk">"oui"</span>:               <span class="js">"dd:ee:ff"</span>,
-        <span class="jk">"ssids"</span>:            [],  <span class="jc">// 非公開AP</span>
-        <span class="jk">"rssi_dbm"</span>:         <span class="jn">-75</span>,
-        <span class="jk">"frequency_mhz"</span>:    <span class="jn">2437</span>,
-        <span class="jk">"band"</span>:             <span class="js">"2.4GHz"</span>,
-        <span class="jk">"channel_width_mhz"</span>:<span class="jn">20</span>,
-        <span class="jk">"wifi_standard"</span>:    <span class="js">"802.11n"</span>,
-        <span class="jk">"wifi_standard_code"</span>:<span class="jn">4</span>,
-        <span class="jk">"security"</span>:         <span class="js">"Open"</span>,
-        <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>,
-        <span class="jk">"supplicant_states"</span>:[
-          <span class="js">"DISCONNECTED"</span>, <span class="js">"SCANNING"</span>,
-          <span class="js">"AUTHENTICATING"</span>, <span class="js">"ASSOCIATING"</span>,
-          <span class="js">"ASSOCIATED"</span>, <span class="js">"COMPLETED"</span>
+        <span class="jk">"bssid"</span>:               <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>:             [],  <span class="jc">// 非公開AP</span>
+        <span class="jk">"rssi_dbm"</span>:          <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>:              <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>:          <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>,
+        <span class="jk">"supplicant_states"</span>: [
+          <span class="js">"DISCONNECTED"</span>, <span class="js">"SCANNING"</span>, <span class="js">"AUTHENTICATING"</span>,
+          <span class="js">"ASSOCIATING"</span>, <span class="js">"ASSOCIATED"</span>, <span class="js">"COMPLETED"</span>
+        ],
+        <span class="jk">"supplicant_final_state"</span>: <span class="js">"COMPLETED"</span>,
+        <span class="jk">"supplicant_elapsed_ms"</span>:  <span class="jn">1560</span>
+      }
+    ]
+  }
+]</div>
+    </div>
+  </div>
+
+  <!-- ⑨ 接続試行（SSID単位）のデータ構造 -->
+  <div class="card">
+    <div class="card-header h-conn-ssid">⑨ 接続試行（SSID単位）のデータ構造</div>
+    <div class="card-body">
+      <p style="font-size:11.5px;color:#556;margin-bottom:8px;">
+        ユーザが選択した SSID に属する AP に絞って接続試行を行うモード。<code>pending_ssid_scans.json</code> に蓄積されます。
+      </p>
+      <p style="font-size:11px;background:#f4f5f8;border-left:3px solid #99a;padding:6px 10px;margin-bottom:10px;border-radius:0 4px 4px 0;color:#556;">
+        <strong>targeted_ssids</strong>: ユーザが選択した SSID のリスト。<code>null</code> = 測定未実施で保存された場合。<br>
+        <strong>scan_results</strong>: スキャンで検出した全 AP（<code>supplicant_*</code> フィールドなし）。<br>
+        <strong>access_points</strong>: <code>targeted_ssids</code> に合致する AP のみ（<code>supplicant_*</code> フィールドあり）。
+      </p>
+      <div class="json-block">[
+  {
+    <span class="jk">"scan_id"</span>:       <span class="js">"b2c3d4e5-…"</span>,
+    <span class="jk">"device_id"</span>:     <span class="js">"9e8d7c6b-…"</span>,
+    <span class="jk">"device"</span>: { <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>, <span class="jk">"model"</span>: <span class="js">"Pixel 8"</span>, <span class="jk">"android_api"</span>: <span class="jn">34</span> },
+    <span class="jk">"scanned_at"</span>:    <span class="js">"2025-09-25T14:32:00"</span>,
+    <span class="jk">"label"</span>:         <span class="js">""</span>,
+    <span class="jk">"targeted_ssids"</span>: [<span class="js">"MyWifi"</span>],  <span class="jc">// 選択した SSID</span>
+    <span class="jk">"location"</span>: { <span class="jk">"latitude"</span>: <span class="jn">35.68123</span>, <span class="jk">"longitude"</span>: <span class="jn">139.76543</span>, <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span> },
+    <span class="jk">"scan_results"</span>: [  <span class="jc">// スキャン検出の全 AP（supplicant フィールドなし）</span>
+      {
+        <span class="jk">"bssid"</span>: <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>: [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>: <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>: <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>: <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>
+      },
+      {
+        <span class="jk">"bssid"</span>: <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>: [], <span class="jk">"rssi_dbm"</span>: <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>: <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>: <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>: <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>
+      }
+    ],
+    <span class="jk">"access_points"</span>: [  <span class="jc">// targeted_ssids に合致する AP のみ（supplicant フィールドあり）</span>
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>:             [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>:              <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>:          <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>,
+        <span class="jk">"supplicant_states"</span>: [
+          <span class="js">"DISCONNECTED"</span>, <span class="js">"ASSOCIATING"</span>, <span class="js">"ASSOCIATED"</span>,
+          <span class="js">"FOUR_WAY_HANDSHAKE"</span>, <span class="js">"DISCONNECTED"</span>
+        ],
+        <span class="jk">"supplicant_final_state"</span>: <span class="js">"FAILED_AT_DISCONNECTED"</span>,
+        <span class="jk">"supplicant_elapsed_ms"</span>:  <span class="jn">2840</span>
+      }
+    ]
+  }
+]</div>
+    </div>
+  </div>
+
+  <!-- ⑩ 接続試行（security単位）のデータ構造 -->
+  <div class="card">
+    <div class="card-header h-conn-sec">⑩ 接続試行（security単位）のデータ構造</div>
+    <div class="card-body">
+      <p style="font-size:11.5px;color:#556;margin-bottom:8px;">
+        ユーザが選択したセキュリティ規格に属する AP に絞って接続試行を行うモード。<code>pending_security_scans.json</code> に蓄積されます。
+      </p>
+      <p style="font-size:11px;background:#f4f5f8;border-left:3px solid #99a;padding:6px 10px;margin-bottom:10px;border-radius:0 4px 4px 0;color:#556;">
+        <strong>targeted_security_groups</strong>: ユーザが選択したセキュリティ規格のリスト（例: <code>["WPA2", "Open"]</code>）。<code>null</code> = 測定未実施で保存された場合。<br>
+        <strong>scan_results</strong>: スキャンで検出した全 AP（<code>supplicant_*</code> フィールドなし）。<br>
+        <strong>access_points</strong>: <code>targeted_security_groups</code> に合致する AP のみ（<code>supplicant_*</code> フィールドあり）。
+      </p>
+      <div class="json-block">[
+  {
+    <span class="jk">"scan_id"</span>:       <span class="js">"c3d4e5f6-…"</span>,
+    <span class="jk">"device_id"</span>:     <span class="js">"9e8d7c6b-…"</span>,
+    <span class="jk">"device"</span>: { <span class="jk">"manufacturer"</span>: <span class="js">"Google"</span>, <span class="jk">"model"</span>: <span class="js">"Pixel 8"</span>, <span class="jk">"android_api"</span>: <span class="jn">34</span> },
+    <span class="jk">"scanned_at"</span>:    <span class="js">"2025-09-25T14:34:00"</span>,
+    <span class="jk">"label"</span>:         <span class="js">""</span>,
+    <span class="jk">"targeted_security_groups"</span>: [<span class="js">"Open"</span>],  <span class="jc">// 選択したセキュリティ規格</span>
+    <span class="jk">"location"</span>: { <span class="jk">"latitude"</span>: <span class="jn">35.68123</span>, <span class="jk">"longitude"</span>: <span class="jn">139.76543</span>, <span class="jk">"accuracy_m"</span>: <span class="jn">8.5</span> },
+    <span class="jk">"scan_results"</span>: [  <span class="jc">// スキャン検出の全 AP（supplicant フィールドなし）</span>
+      {
+        <span class="jk">"bssid"</span>: <span class="js">"aa:bb:cc:11:22:33"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"aa:bb:cc"</span>,
+        <span class="jk">"ssids"</span>: [<span class="js">"MyWifi"</span>], <span class="jk">"rssi_dbm"</span>: <span class="jn">-58</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">5180</span>,
+        <span class="jk">"band"</span>: <span class="js">"5GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">80</span>,
+        <span class="jk">"wifi_standard"</span>: <span class="js">"802.11ax"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">6</span>,
+        <span class="jk">"security"</span>: <span class="js">"WPA2"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[WPA2-PSK-CCMP][ESS]"</span>
+      },
+      {
+        <span class="jk">"bssid"</span>: <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>: [], <span class="jk">"rssi_dbm"</span>: <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>: <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>: <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>: <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>
+      }
+    ],
+    <span class="jk">"access_points"</span>: [  <span class="jc">// targeted_security_groups に合致する AP のみ（supplicant フィールドあり）</span>
+      {
+        <span class="jk">"bssid"</span>:               <span class="js">"dd:ee:ff:44:55:66"</span>, <span class="jk">"mld_mac_address"</span>: <span class="jnull">null</span>, <span class="jk">"oui"</span>: <span class="js">"dd:ee:ff"</span>,
+        <span class="jk">"ssids"</span>:             [], <span class="jk">"rssi_dbm"</span>: <span class="jn">-75</span>, <span class="jk">"frequency_mhz"</span>: <span class="jn">2437</span>,
+        <span class="jk">"band"</span>:              <span class="js">"2.4GHz"</span>, <span class="jk">"channel_width_mhz"</span>: <span class="jn">20</span>,
+        <span class="jk">"wifi_standard"</span>:     <span class="js">"802.11n"</span>, <span class="jk">"wifi_standard_code"</span>: <span class="jn">4</span>,
+        <span class="jk">"security"</span>:          <span class="js">"Open"</span>, <span class="jk">"capabilities_raw"</span>: <span class="js">"[ESS]"</span>,
+        <span class="jk">"supplicant_states"</span>: [
+          <span class="js">"DISCONNECTED"</span>, <span class="js">"SCANNING"</span>, <span class="js">"AUTHENTICATING"</span>,
+          <span class="js">"ASSOCIATING"</span>, <span class="js">"ASSOCIATED"</span>, <span class="js">"COMPLETED"</span>
         ],
         <span class="jk">"supplicant_final_state"</span>: <span class="js">"COMPLETED"</span>,
         <span class="jk">"supplicant_elapsed_ms"</span>:  <span class="jn">1560</span>

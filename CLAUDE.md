@@ -59,7 +59,7 @@ After each WiFi scan, the app sequentially attempts to connect to each detected 
 
 - **ダイアログ表示はAndroid OS側が制御する。必ずしも表示されるとは限らない。** アプリはrequestNetwork()を呼ぶだけであり、その後のUI表示・接続処理はOS任せ。
 - `SUPPLICANT_STATE_CHANGED_ACTION` BroadcastReceiver captures state transitions
-- Single phase (`DIALOG_TIMEOUT_MS` = 15s): `withTimeoutOrNull` で最大15秒待機。`onAvailable` / `onUnavailable` / 終端SupplicantState（COMPLETED・DISCONNECTED＋鍵交換済み）のいずれかで早期終了。15秒何も来なければ → `FAILED_AT_DIALOG_TIMEOUT`
+- タイムアウトは2段階: `NO_ACTIVITY_TIMEOUT_MS`（3s）を `requestNetwork()` 第4引数に渡しOS側タイムアウトとする。通常はこれで `onUnavailable` が発火し早期終了。`DIALOG_TIMEOUT_MS`（10s）は `withTimeoutOrNull` のフォールバックで `onUnavailable` すら来ない異常ケース用。10秒何も来なければ → `FAILED_AT_DIALOG_TIMEOUT`
 - `supplicantContinuation` (volatile field) connects the BroadcastReceiver to the suspended coroutine
 - **Critical**: `requestNetwork()` must be called INSIDE `suspendCancellableCoroutine` block, after setting `supplicantContinuation`, to avoid race condition where `onUnavailable()` fires before the continuation is registered
 - WEP APs are skipped (`SKIPPED`). EAP APs are attempted with dummy credentials.
