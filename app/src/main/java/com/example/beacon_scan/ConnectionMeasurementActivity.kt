@@ -19,6 +19,7 @@ import android.view.View
 import com.google.android.material.appbar.MaterialToolbar
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -76,6 +77,7 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
     private lateinit var btnEndSession: Button
     private lateinit var switchAutoScan: SwitchCompat
     private lateinit var switchSendMode: SwitchCompat
+    private lateinit var rgTimeout: RadioGroup
     private lateinit var etUrl: TextInputEditText
     private lateinit var tvEmpty: TextView
     private lateinit var tvAutoScanStatus: TextView
@@ -181,6 +183,7 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         btnEndSession = findViewById(R.id.btnEndSession)
         switchAutoScan = findViewById(R.id.switchAutoScan)
         switchSendMode = findViewById(R.id.switchSendMode)
+        rgTimeout = findViewById(R.id.rgTimeout)
         etUrl = findViewById(R.id.etUrl)
         tvEmpty = findViewById(R.id.tvEmpty)
         tvAutoScanStatus = findViewById(R.id.tvAutoScanStatus)
@@ -630,6 +633,11 @@ WiFi接続プロセスの状態遷移を記録する機能。
         isScanInProgress = true
         isManualMeasuring = true
 
+        val selectedTimeoutMs = when (rgTimeout.checkedRadioButtonId) {
+            R.id.rb1s -> 1_000L
+            R.id.rb5s -> 5_000L
+            else      -> 3_000L
+        }
         lifecycleScope.launch {
             val measuredList = measurer.measureAll(
                 targetAps,
@@ -652,7 +660,8 @@ WiFi接続プロセスの状態遷移を記録する機能。
                         apList.add(result)
                         adapter.notifyDataSetChanged()
                     }
-                }
+                },
+                noActivityTimeoutMs = selectedTimeoutMs
             )
 
             btnStopMeasurement.visibility = View.GONE
@@ -833,11 +842,20 @@ WiFi接続プロセスの状態遷移を記録する機能。
             tvEmpty.visibility = View.GONE
 
             val snapshotList = apList.toList()
+            val selectedTimeoutMs = when (rgTimeout.checkedRadioButtonId) {
+                R.id.rb1s -> 1_000L
+                R.id.rb5s -> 5_000L
+                else      -> 3_000L
+            }
             lifecycleScope.launch {
-                val measuredList = measurer.measureAll(snapshotList, onProgress = { progress, total, name ->
-                    val remaining = total - progress
-                    tvSsidCount.text = "今回検出: ${total}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
-                })
+                val measuredList = measurer.measureAll(
+                    snapshotList,
+                    onProgress = { progress, total, name ->
+                        val remaining = total - progress
+                        tvSsidCount.text = "今回検出: ${total}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
+                    },
+                    noActivityTimeoutMs = selectedTimeoutMs
+                )
 
                 btnStopMeasurement.visibility = View.GONE
 

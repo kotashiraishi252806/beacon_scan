@@ -79,6 +79,49 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/switchAutoScan" />
 
+    <TextView
+        android:id="@+id/tvTimeoutLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:text="OSタイムアウト:"
+        android:textSize="14sp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/switchSendMode"
+        app:layout_constraintBaseline_toBaselineOf="@id/rgTimeout" />
+
+    <RadioGroup
+        android:id="@+id/rgTimeout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        app:layout_constraintStart_toEndOf="@id/tvTimeoutLabel"
+        app:layout_constraintTop_toBottomOf="@id/switchSendMode">
+
+        <RadioButton
+            android:id="@+id/rb1s"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1s" />
+
+        <RadioButton
+            android:id="@+id/rb3s"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="3s"
+            android:checked="true" />
+
+        <RadioButton
+            android:id="@+id/rb5s"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="5s" />
+
+    </RadioGroup>
+
     <Button
         android:id="@+id/btnSendPending"
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -91,7 +134,7 @@
         android:enabled="false"
         app:layout_constraintEnd_toStartOf="@id/btnDiscardPending"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/switchSendMode" />
+        app:layout_constraintTop_toBottomOf="@id/rgTimeout" />
 
     <Button
         android:id="@+id/btnDiscardPending"

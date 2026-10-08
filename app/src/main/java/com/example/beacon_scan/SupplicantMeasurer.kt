@@ -109,7 +109,8 @@ class SupplicantMeasurer(
         apList: List<AccessPoint>,
         onProgress: (Int, Int, String) -> Unit,
         onApStart: (AccessPoint) -> Unit = {},
-        onApFinished: (AccessPoint) -> Unit = {}
+        onApFinished: (AccessPoint) -> Unit = {},
+        noActivityTimeoutMs: Long = NO_ACTIVITY_TIMEOUT_MS
     ): List<AccessPoint> {
         stopRequested = false
         val results = mutableListOf<AccessPoint>()
@@ -120,7 +121,7 @@ class SupplicantMeasurer(
             }
             onProgress(i + 1, apList.size, ap.ssids.firstOrNull() ?: ap.bssid)
             onApStart(ap)
-            val result = measureForAp(ap)
+            val result = measureForAp(ap, noActivityTimeoutMs)
             results.add(result)
             onApFinished(result)
             delay(300)
@@ -130,7 +131,7 @@ class SupplicantMeasurer(
 
     // AP1件に対してSupplicant測定を行い結果を返す
     @Suppress("DEPRECATION")
-    private suspend fun measureForAp(ap: AccessPoint): AccessPoint {
+    private suspend fun measureForAp(ap: AccessPoint, noActivityTimeoutMs: Long = NO_ACTIVITY_TIMEOUT_MS): AccessPoint {
         val startMs = System.currentTimeMillis()
         supplicantTransitions.clear()
         supplicantContinuation = null
@@ -178,7 +179,7 @@ class SupplicantMeasurer(
                     supplicantCallback = null
                     runCatching { connectivityManager.unregisterNetworkCallback(cb) }
                 }
-                connectivityManager.requestNetwork(request, cb, Handler(Looper.getMainLooper()), NO_ACTIVITY_TIMEOUT_MS.toInt())
+                connectivityManager.requestNetwork(request, cb, Handler(Looper.getMainLooper()), noActivityTimeoutMs.toInt())
             }
         }
 
