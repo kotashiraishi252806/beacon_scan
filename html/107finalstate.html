@@ -409,146 +409,152 @@
 </div>
 
 <!-- ══════════════════════════
-     S4 判定フロー可視化（全7種）
+     S4 判定フロー可視化
 ══════════════════════════ -->
-<div class="slide" style="overflow-y:auto;">
-  <div class="label">判定フロー可視化（全 7 種）</div>
+<div class="slide" style="overflow:auto;">
+  <div class="label">判定フロー可視化</div>
   <h2>measureForAp() の finalstate 決定フロー</h2>
   <p style="font-size:12px; color:#667; margin-bottom:8px;">
-    コードの評価順序に対応。条件が満たされた時点で右の最終状態へ分岐し終了。
+    上から順に評価。YESで下部の finalstate へ終了。すべてNOならば左端の FAILED_AT_DIALOG_TIMEOUT に至る。
   </p>
   <hr class="rule">
 
-  <div style="flex:1; overflow-y:auto;">
-    <div style="max-width:860px; margin:0 auto; padding-bottom:16px;">
+  <!-- 条件間隔1.5倍(step60→90px)・finalstate間隔1.5倍 -->
+  <div style="position:relative; height:555px; min-width:1200px;">
 
-      <!-- START -->
-      <div style="display:flex; justify-content:center;">
-        <div style="background:#1d57b0; color:white; border-radius:8px; padding:7px 28px; font-size:13px; font-weight:700; font-family:'Courier New',monospace;">
-          AP 1 件の測定開始
-        </div>
-      </div>
-      <div style="display:flex; justify-content:center;"><div style="width:2px; height:12px; background:#aab;"></div></div>
+    <svg style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;" xmlns="http://www.w3.org/2000/svg">
 
-      <!-- D1: buildSpecifier == null -->
-      <div style="display:flex; align-items:center; gap:8px;">
-        <div style="flex:1; background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; color:#3a1a00;">
-          ◇ <code>buildSpecifier()</code> が <code>null</code> を返したか？
-        </div>
-        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
-          <div style="height:2px; width:16px; background:#aab;"></div>
-          <span style="font-size:11px; font-weight:700; color:#b07030;">YES</span>
-          <div style="height:2px; width:8px; background:#aab;"></div>
-          <span class="fs fs-skip">SKIPPED</span>
-        </div>
-      </div>
-      <div style="display:flex; justify-content:center; align-items:center; gap:4px; height:22px;">
-        <div style="width:2px; height:100%; background:#aab;"></div>
-        <span style="font-size:10px; font-weight:700; color:#889; margin-left:4px;">NO</span>
-      </div>
+      <!-- スパイン -->
+      <line x1="130" y1="8" x2="130" y2="492" stroke="#bbb" stroke-width="2"/>
 
-      <!-- ACTION: requestNetwork / wait -->
-      <div style="background:#eef4ff; border:2px solid #1d57b0; border-radius:8px; padding:8px 16px; font-size:12px; font-weight:600; color:#0d1f45;">
-        <code>requestNetwork()</code> 呼び出し → <code>withTimeoutOrNull(10 s)</code> 内で待機<br>
-        <span style="font-size:11px; font-weight:400; color:#667;">3 s OS timeout → <code>onUnavailable()</code> 発火 ／ 何も来なければ 10 s 経過で null 返却</span>
-      </div>
-      <div style="display:flex; justify-content:center;"><div style="width:2px; height:12px; background:#aab;"></div></div>
+      <!-- YES polylines: 右へ→下へ -->
+      <polyline points="260,75  1137,75  1137,492" fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="260,165 1009,165 1009,492" fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="260,255  866,255  866,492" fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="260,345  614,345  614,368"  fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="614,409  520,409  520,492"  fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="614,409  708,409  708,492"  fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="260,435  355,435  355,492"  fill="none" stroke="#888" stroke-width="1.5"/>
 
-      <!-- D2: stopRequested -->
-      <div style="display:flex; align-items:center; gap:8px;">
-        <div style="flex:1; background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; color:#3a1a00;">
-          ◇ <code>stopRequested</code> == true かつ <code>finalState</code> != <code>"COMPLETED"</code> ?
-        </div>
-        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
-          <div style="height:2px; width:16px; background:#aab;"></div>
-          <span style="font-size:11px; font-weight:700; color:#b07030;">YES</span>
-          <div style="height:2px; width:8px; background:#aab;"></div>
-          <span class="fs fs-cancel">CANCELLED</span>
-        </div>
-      </div>
-      <div style="display:flex; justify-content:center; align-items:center; gap:4px; height:22px;">
-        <div style="width:2px; height:100%; background:#aab;"></div>
-        <span style="font-size:10px; font-weight:700; color:#889; margin-left:4px;">NO</span>
-      </div>
+      <!-- YES ラベル -->
+      <text x="263" y="71"  font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="263" y="161" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="263" y="251" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="263" y="341" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="263" y="431" font-size="10" fill="#666" font-family="sans-serif">YES</text>
 
-      <!-- D3: finalState == COMPLETED -->
-      <div style="display:flex; align-items:center; gap:8px;">
-        <div style="flex:1; background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; color:#3a1a00;">
-          ◇ <code>finalState</code> == <code>"COMPLETED"</code> ?
-        </div>
-        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
-          <div style="height:2px; width:16px; background:#aab;"></div>
-          <span style="font-size:11px; font-weight:700; color:#b07030;">YES</span>
-          <div style="height:2px; width:8px; background:#aab;"></div>
-          <span class="fs fs-ok">COMPLETED</span>
-        </div>
-      </div>
-      <div style="display:flex; justify-content:center; align-items:center; gap:4px; height:22px;">
-        <div style="width:2px; height:100%; background:#aab;"></div>
-        <span style="font-size:10px; font-weight:700; color:#889; margin-left:4px;">NO</span>
-      </div>
+      <!-- サブ条件 YES/NO -->
+      <text x="663" y="406" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="530" y="406" font-size="10" fill="#666" font-family="sans-serif">NO</text>
 
-      <!-- D4: transitions.isNotEmpty() -->
-      <div style="background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; color:#3a1a00; text-align:center;">
-        ◇ <code>SUPPLICANT_STATE_CHANGED_ACTION</code> が 1 件以上届いたか？
-      </div>
+      <!-- NO ラベル（白ボックスの間に配置） -->
+      <text x="135" y="113" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+      <text x="135" y="126" font-size="9"  fill="#bbb" font-family="sans-serif">requestNetwork() → withTimeoutOrNull(10s)</text>
+      <text x="135" y="210" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+      <text x="135" y="300" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+      <text x="135" y="390" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+      <text x="135" y="473" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
 
-      <!-- D4 two-column branch -->
-      <div style="display:flex; width:100%; border-top:2px solid #aab;">
+    </svg>
 
-        <!-- YES column -->
-        <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:0 10px 8px; border-right:2px dashed #ccd;">
-          <div style="width:2px; height:10px; background:#aab;"></div>
-          <div style="font-size:12px; font-weight:700; color:#237038; margin-bottom:6px;">YES（transitions あり）</div>
-          <div style="background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:7px 14px; font-size:12px; font-weight:700; color:#3a1a00; text-align:center; width:100%;">
-            ◇ <code>transitions</code> の末尾 state は？
-          </div>
-          <div style="width:100%; display:flex; border-top:2px solid #aab;">
-            <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:4px 4px 6px; border-right:1px dashed #ccd;">
-              <div style="width:2px; height:8px; background:#aab;"></div>
-              <div style="font-size:11px; font-weight:700; color:#721c24; text-align:center; line-height:1.7; margin-bottom:4px;">DISCONNECTED<br>INACTIVE<br>SCANNING</div>
-              <div style="width:2px; height:8px; background:#aab;"></div>
-              <span class="fs fs-fail">FAILED_AT_&lt;STATE&gt;</span>
-            </div>
-            <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:4px 4px 6px;">
-              <div style="width:2px; height:8px; background:#aab;"></div>
-              <div style="font-size:11px; font-weight:700; color:#856404; text-align:center; line-height:1.7; margin-bottom:4px;">AUTHENTICATING<br>ASSOCIATING 等</div>
-              <div style="width:2px; height:8px; background:#aab;"></div>
-              <span class="fs fs-tout">TIMEOUT_AT_&lt;STATE&gt;</span>
-            </div>
-          </div>
-          <div style="margin-top:6px; font-size:11px; color:#889; border:1px dashed #ccd; border-radius:6px; padding:3px 8px; text-align:center; line-height:1.6;">
-            3 s OS timeout 後・10 s fallback 後いずれでも起こりうる
-          </div>
-        </div>
+    <!-- START -->
+    <div style="position:absolute;left:0;top:8px;width:260px;height:35px;box-sizing:border-box;background:#0d1f45;color:white;border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:'Courier New',monospace;font-size:12px;">AP 1件の測定開始</div>
 
-        <!-- NO column -->
-        <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:0 10px 8px;">
-          <div style="width:2px; height:10px; background:#aab;"></div>
-          <div style="font-size:12px; font-weight:700; color:#b03030; margin-bottom:6px;">NO（transitions 空）</div>
-          <div style="background:#fff3e0; border:2px solid #b07030; border-radius:8px; padding:7px 14px; font-size:12px; font-weight:700; color:#3a1a00; text-align:center; width:100%;">
-            ◇ <code>onUnavailable()</code> が呼ばれたか？<br>
-            <span style="font-size:10px; font-weight:400;">（= 3 s OS timeout が発火したか）</span>
-          </div>
-          <div style="width:100%; display:flex; border-top:2px solid #aab;">
-            <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:4px 4px 6px; border-right:1px dashed #ccd;">
-              <div style="width:2px; height:8px; background:#aab;"></div>
-              <div style="font-size:11px; font-weight:700; color:#237038; text-align:center; line-height:1.7; margin-bottom:4px;">YES<br>（3 s OS timeout）</div>
-              <div style="width:2px; height:8px; background:#aab;"></div>
-              <span class="fs fs-none">NOT_FOUND</span>
-            </div>
-            <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:4px 4px 6px;">
-              <div style="width:2px; height:8px; background:#aab;"></div>
-              <div style="font-size:11px; font-weight:700; color:#b03030; text-align:center; line-height:1.7; margin-bottom:4px;">NO<br>（10 s fallback）</div>
-              <div style="width:2px; height:8px; background:#aab;"></div>
-              <span class="fs fs-fail" style="font-size:11px; white-space:normal; text-align:center; line-height:1.4;">FAILED_AT_<br>DIALOG_TIMEOUT</span>
-            </div>
-          </div>
-        </div>
+    <!-- 条件ボックス（step=90px, top: 55,145,235,325,415） -->
+    <div style="position:absolute;left:0;top:55px; width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:12px;">① buildSpecifier() == null ?</div>
+    <div style="position:absolute;left:0;top:145px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:11px;line-height:1.4;"><span>② stopRequested==true &amp;&amp;<br>　finalState!="COMPLETED" ?</span></div>
+    <div style="position:absolute;left:0;top:235px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:12px;">③ finalState == "COMPLETED" ?</div>
+    <div style="position:absolute;left:0;top:325px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:12px;">④ transitions.isNotEmpty() ?</div>
+    <div style="position:absolute;left:0;top:415px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:12px;">⑤ unavailableFired == true ?</div>
 
-      </div><!-- D4 branch -->
+    <!-- ④ サブ条件ボックス（cx=614, top=368） -->
+    <div style="position:absolute;left:484px;top:368px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:11px;line-height:1.4;"><span>last ∈ {DISCONNECTED,<br>　INACTIVE, SCANNING} ?</span></div>
 
-    </div>
+    <!-- 底部 finalstate（1.5倍間隔: cx=130,355,520,708,866,1009,1137） -->
+    <div style="position:absolute;top:496px;left:130px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-fail"   style="font-size:11px;">FAILED_AT_DIALOG_TIMEOUT</span></div>
+    <div style="position:absolute;top:496px;left:355px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-none"   style="font-size:11px;">NOT_FOUND</span></div>
+    <div style="position:absolute;top:496px;left:520px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-tout"   style="font-size:11px;">TIMEOUT_AT_&lt;STATE&gt;</span></div>
+    <div style="position:absolute;top:496px;left:708px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-fail"   style="font-size:11px;">FAILED_AT_&lt;STATE&gt;</span></div>
+    <div style="position:absolute;top:496px;left:866px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-ok"     style="font-size:11px;">COMPLETED</span></div>
+    <div style="position:absolute;top:496px;left:1009px;transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-cancel" style="font-size:11px;">CANCELLED</span></div>
+    <div style="position:absolute;top:496px;left:1137px;transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-skip"   style="font-size:11px;">SKIPPED</span></div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════
+     S5 判定フロー可視化（修正版）
+══════════════════════════ -->
+<div class="slide" style="overflow:auto;">
+  <div class="label">判定フロー可視化（修正版）</div>
+  <h2>measureForAp() の finalstate 決定フロー（実装準拠）</h2>
+  <p style="font-size:12px; color:#667; margin-bottom:8px;">
+    P4 との差分：④ を <code>unavailableFired&amp;&amp;transitions.isEmpty()</code>、⑤ を <code>transitions.isNotEmpty()</code> に修正。評価順を実装に合わせた。
+  </p>
+  <hr class="rule">
+
+  <div style="position:relative; height:640px; min-width:1200px;">
+
+    <svg style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;" xmlns="http://www.w3.org/2000/svg">
+
+      <!-- スパイン -->
+      <line x1="130" y1="8" x2="130" y2="552" stroke="#bbb" stroke-width="2"/>
+
+      <!-- YES polylines: 右へ→下へ -->
+      <polyline points="260,75  1137,75  1137,559" fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="260,165 1009,165 1009,559" fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="260,255  866,255  866,559" fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="260,345  708,345  708,559"  fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="260,435  410,435  410,465"  fill="none" stroke="#888" stroke-width="1.5"/>
+      <line x1="410" y1="506" x2="410" y2="530" stroke="#888" stroke-width="1.5"/>
+      <circle cx="410" cy="530" r="3" fill="#888"/>
+      <polyline points="410,530  355,530  355,559"  fill="none" stroke="#888" stroke-width="1.5"/>
+      <polyline points="410,530  520,530  520,559"  fill="none" stroke="#888" stroke-width="1.5"/>
+
+      <!-- YES ラベル -->
+      <text x="263" y="71"  font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="263" y="161" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="263" y="251" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="263" y="341" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="263" y="431" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+
+      <!-- サブ条件 YES/NO -->
+      <text x="450" y="528" font-size="10" fill="#666" font-family="sans-serif">YES</text>
+      <text x="366" y="528" font-size="10" fill="#666" font-family="sans-serif">NO</text>
+
+      <!-- NO ラベル（白ボックスの間に配置） -->
+      <text x="135" y="113" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+      <text x="135" y="126" font-size="9"  fill="#bbb" font-family="sans-serif">requestNetwork() → withTimeoutOrNull(10s)</text>
+      <text x="135" y="210" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+      <text x="135" y="300" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+      <text x="135" y="390" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+      <text x="135" y="473" font-size="10" fill="#888" font-family="sans-serif">↓ NO</text>
+
+    </svg>
+
+    <!-- START -->
+    <div style="position:absolute;left:0;top:8px;width:260px;height:35px;box-sizing:border-box;background:#0d1f45;color:white;border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:'Courier New',monospace;font-size:12px;">AP 1件の測定開始</div>
+
+    <!-- 条件ボックス（step=90px, top: 55,145,235,325,415） -->
+    <div style="position:absolute;left:0;top:55px; width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:12px;">① buildSpecifier() == null ?</div>
+    <div style="position:absolute;left:0;top:145px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:11px;line-height:1.4;"><span>② stopRequested==true &amp;&amp;<br>　finalState!="COMPLETED" ?</span></div>
+    <div style="position:absolute;left:0;top:235px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:12px;">③ finalState == "COMPLETED" ?</div>
+    <div style="position:absolute;left:0;top:325px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:11px;line-height:1.4;"><span>④ unavailableFired==true &amp;&amp;<br>　transitions.isEmpty() ?</span></div>
+    <div style="position:absolute;left:0;top:415px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:12px;">⑤ transitions.isNotEmpty() ?</div>
+
+    <!-- ⑤ サブ条件ボックス（cx=410, top=465） -->
+    <div style="position:absolute;left:280px;top:465px;width:260px;height:40px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;background:#fff;display:flex;align-items:center;padding:0 12px;font-family:'Courier New',monospace;font-size:11px;line-height:1.4;"><span>last ∈ {DISCONNECTED,<br>　INACTIVE, SCANNING} ?</span></div>
+
+    <!-- 底部 finalstate（1.5倍間隔: cx=130,355,520,708,866,1009,1137） -->
+    <div style="position:absolute;top:563px;left:130px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-fail"   style="font-size:11px;">FAILED_AT_DIALOG_TIMEOUT</span></div>
+    <div style="position:absolute;top:563px;left:355px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-tout"   style="font-size:11px;">TIMEOUT_AT_&lt;STATE&gt;</span></div>
+    <div style="position:absolute;top:563px;left:520px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-fail"   style="font-size:11px;">FAILED_AT_&lt;STATE&gt;</span></div>
+    <div style="position:absolute;top:563px;left:708px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-none"   style="font-size:11px;">NOT_FOUND</span></div>
+    <div style="position:absolute;top:563px;left:866px; transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-ok"     style="font-size:11px;">COMPLETED</span></div>
+    <div style="position:absolute;top:563px;left:1009px;transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-cancel" style="font-size:11px;">CANCELLED</span></div>
+    <div style="position:absolute;top:563px;left:1137px;transform:translateX(-50%);white-space:nowrap;"><span class="fs fs-skip"   style="font-size:11px;">SKIPPED</span></div>
+
   </div>
 </div>
 
