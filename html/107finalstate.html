@@ -429,6 +429,91 @@
   </p>
 </div>
 
+<!-- ══════════════════════════
+     S5 NOT_FOUNDになる条件とその解釈
+══════════════════════════ -->
+<div class="slide" style="overflow-y: auto;">
+  <div class="label">NOT_FOUND 詳細</div>
+  <h2>NOT_FOUNDになる条件とその解釈</h2>
+  <hr class="rule">
+
+  <div style="font-size:20px; font-weight:700; color:#1d57b0; margin-bottom:10px;">結論：<span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:14px;margin-right:2px;">①</span>接続試行を行ったが、<span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:14px;margin-right:2px;">②</span>wpa_supplicantが状態遷移を1件も送出せず（接続シーケンス未開始）、<span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:14px;margin-right:2px;">③</span>OSから接続不可通知（<code>onUnavailable()</code>）が返ってきたとき</div>
+
+
+  <div style="flex:1; overflow-y:auto;">
+    <table style="font-size:13px;">
+      <tr>
+        <th style="width:36%;">条件</th>
+        <th style="width:8%; text-align:center;">真/偽</th>
+        <th style="width:56%;">解釈</th>
+      </tr>
+      <tr>
+        <td>
+          <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">①</span><code>buildSpecifier(ap) が非null</code><br>
+          <span style="font-size:11px; color:#667;">139行目、早期returnを通過</span><br>
+          <span style="font-size:11px; color:#667; border-top:1px dashed #ccd; display:block; margin-top:4px; padding-top:4px;">
+            ＝ 以下の3条件をすべて満たす：<br>
+            (a) <code>ap.security != "WEP"</code>（222行目）<br>
+            (b) BSSIDパース成功（217行目）<br>
+            (c) <code>builder.build()</code> 成功（263行目）
+          </span>
+        </td>
+        <td style="text-align:center; font-weight:700; color:#237038;">真</td>
+        <td>接続先APのBSSID・SSIDと認証方法をまとめたオブジェクト（<code>WifiNetworkSpecifier</code>）が作れた</td>
+      </tr>
+      <tr>
+        <td><code>stopRequested &amp;&amp; finalState != "COMPLETED"</code><br><span style="font-size:11px; color:#667;">194行目</span></td>
+        <td style="text-align:center; font-weight:700; color:#b03030;">偽</td>
+        <td>測定停止要求はなかった（<code>stopRequested == false</code>）</td>
+      </tr>
+      <tr>
+        <td><code>finalState == "COMPLETED"</code><br><span style="font-size:11px; color:#667;">195行目</span></td>
+        <td style="text-align:center; font-weight:700; color:#b03030;">偽</td>
+        <td><code>onAvailable()</code> が呼ばれなかった（= 接続確立の通知が来なかった、<code>finalState</code> の初期値 <code>"NOT_FOUND"</code> が維持された、149・155行目）</td>
+      </tr>
+      <tr>
+        <td><span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">③</span><code>unavailableFired == true</code> &amp;&amp; <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">②</span><code>transitions.isEmpty()</code><br><span style="font-size:11px; color:#667;">196行目</span></td>
+        <td style="text-align:center; font-weight:700; color:#237038;">真</td>
+        <td>
+          <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">③</span><code>onUnavailable()</code> が呼ばれた（= OSが接続不可を通知した、162行目）<br>
+          <strong>かつ</strong><br>
+          <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">②</span><code>SUPPLICANT_STATE_CHANGED_ACTION</code> が1件も届かなかった（= wpa_supplicantが接続シーケンスを開始しなかった、68・191行目）
+        </td>
+      </tr>
+    </table>
+
+    <div style="font-size:12px; color:#b03030; margin-top:8px;">
+      ※ 条件2・3はNOT_FOUNDの内容を定義しておらず、CANCELLED・COMPLETEDに該当しないことを示す消去条件である。
+    </div>
+
+    <!-- onAvailable補足 -->
+    <div style="margin-top:18px;">
+      <div style="font-size:13px; font-weight:700; color:#1d57b0; margin-bottom:10px;">補足：2つめの条件判定でfinalState ！= "COMPLETED" があるのはなぜ？</div>
+
+
+      <div class="hbox gray" style="font-size:12px; margin-bottom:10px;">
+        <strong>理由</strong><br>
+        「onAvailable() が発火して、finalState が "COMPLETED" として記録されていたとき、停止ボタンを押したときに記述される "CANCELLED" で上書きされないようにするため」
+      </div>
+
+      <div class="hbox" style="font-size:13px; margin-bottom:10px;">
+        <strong><code>onAvailable()</code> 発火 = finalstateにcompletedとしている部分に関する補足</strong><br>
+        Android公式ドキュメントに以下の記述が確認できる。<br>
+        <span style="font-size:12px; color:#445; display:block; margin-top:6px; padding-left:8px; border-left:3px solid #aac;">
+          "If the user accepts the request and the connection to the network is successful, NetworkCallback.onAvailable() is invoked."<br>
+          — <a href="https://developer.android.com/develop/connectivity/wifi/wifi-bootstrap" style="color:#1d57b0;">Wi-Fi Network Request API (developer.android.com)</a>
+        </span>
+        <span style="font-size:12px; color:#445; display:block; margin-top:4px; padding-left:8px; border-left:3px solid #aac;">
+          "Called when the framework connects and has declared a new network ready for use."<br>
+          — <a href="https://developer.android.com/reference/android/net/ConnectivityManager.NetworkCallback" style="color:#1d57b0;">ConnectivityManager.NetworkCallback (developer.android.com)</a>
+        </span>
+      </div>
+
+
+    </div>
+  </div>
+</div>
+
 </div><!-- #deck -->
 
 <div id="nav">
