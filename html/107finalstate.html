@@ -514,6 +514,66 @@
   </div>
 </div>
 
+<!-- ══════════════════════════
+     S6 タイムアウトが短いとNOTFOUNDが増加する考察
+══════════════════════════ -->
+<div class="slide" style="overflow-y: auto;">
+  <div class="label">考察</div>
+  <h2>タイムアウト時間を短くするとNOTFOUNDになるBSSID数が増加する考察</h2>
+  <hr class="rule">
+
+  <div class="hbox" style="font-size:14px; margin-bottom:14px;">
+    <strong>観測事実</strong><br>
+    OSタイムアウトを 1s / 3s / 5s と長くするほど、<code>NOT_FOUND</code> になるBSSID数が減少した
+    （屋内 set1：13→10→9、屋外 set2：20→11→3）。
+  </div>
+
+  <div class="hbox orange" style="font-size:14px; margin-bottom:14px;">
+    <strong>前提：NOT_FOUNDになる3条件（P5参照）</strong><br>
+    <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">①</span>
+    <code>buildSpecifier</code> が非 null（接続試行を行った）<br>
+    <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">②</span>
+    <code>transitions.isEmpty()</code>（wpa_supplicant が状態遷移を1件も送出しなかった）<br>
+    <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">③</span>
+    <code>unavailableFired == true</code>（OSから接続不可通知が来た）
+  </div>
+
+  <div style="font-size:16px; font-weight:700; color:#1d57b0; margin-bottom:10px;">
+    仮説：タイムアウトが短いと、OSが <code>onUnavailable()</code> を発火させるまでの間に
+    wpa_supplicant がAP探索・状態遷移を開始できない
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
+    <div class="card">
+      <div class="card-title">理由①　requestNetwork() は内部スキャンを引き起こす</div>
+      <div style="color:#334; line-height:1.8;">
+        <code>requestNetwork()</code> を呼ぶと、OSはwpa_supplicantへ接続指示を出す前に
+        <code>WifiNetworkSpecifier</code> に合致するAPを探索する内部処理を行う。
+        この内部スキャンには一定の処理時間が必要である。
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">理由②　タイムアウトが短いと内部処理完了前に onUnavailable() が発火する</div>
+      <div style="color:#334; line-height:1.8;">
+        OSタイムアウトが短い（例：1s）場合、内部スキャンが完了する前にタイムアウトが切れ
+        <code>onUnavailable()</code> が発火する。
+        その結果、wpa_supplicantへの接続指示がそもそも届かないか、
+        届いたとしても状態遷移を1件も起こす時間がないまま終了する。
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">結果</div>
+      <div style="color:#334; line-height:1.8;">
+        条件②（<code>transitions.isEmpty()</code>）・条件③（<code>unavailableFired==true</code>）が
+        そろいやすくなり、NOT_FOUNDになるケースが増加する。<br>
+        逆にタイムアウトが長い（例：5s）場合は、内部処理が完了してwpa_supplicantが
+        少なくとも1件の状態遷移（例：SCANNING → ASSOCIATING）を起こす時間が確保できるため、
+        NOT_FOUNDではなく <code>FAILED_AT_&lt;STATE&gt;</code> になるケースが増える。
+      </div>
+    </div>
+  </div>
+</div>
+
 </div><!-- #deck -->
 
 <div id="nav">
