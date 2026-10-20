@@ -524,7 +524,7 @@ class SimpleMeasurementActivity : AppCompatActivity() {
                     conn.doOutput = true
                     conn.connectTimeout = 5000
                     conn.readTimeout = 10000
-                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/")) }
+                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/").escapeNonAsciiForJson()) }
                     val code = conn.responseCode
                     Log.d("BeaconScan", "simple response: $code")
                     conn.disconnect()

@@ -610,10 +610,9 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
             }
             adapter.notifyDataSetChanged()
 
-            val targetedSsids = targetAps.mapNotNull { it.ssids.firstOrNull() }.distinct()
-            selectedSsids = targetedSsids.toSet()
+            selectedSsids = targetAps.mapNotNull { it.ssids.firstOrNull() }.toSet()
             withContext(Dispatchers.IO) {
-                saveToPending(measuredList, location, scanId, sid, targetedSsids, allScannedAps)
+                saveToPending(measuredList, location, scanId, sid)
             }
             updatePendingCount()
 
@@ -715,7 +714,7 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
                 tvEmpty.visibility = View.GONE
                 val sid = sessionId!!
                 lifecycleScope.launch {
-                    withContext(Dispatchers.IO) { saveToPending(emptyList(), location, scanId, sid, null) }
+                    withContext(Dispatchers.IO) { saveToPending(emptyList(), location, scanId, sid) }
                     updatePendingCount()
                     if (switchSendMode.isChecked) trySendAllPending()
                 }
@@ -770,7 +769,7 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
                 }
                 adapter.notifyDataSetChanged()
 
-                withContext(Dispatchers.IO) { saveToPending(measuredList, location, scanId, label, emptyList(), snapshotList) }
+                withContext(Dispatchers.IO) { saveToPending(measuredList, location, scanId, label) }
                 val totalRecords = withContext(Dispatchers.IO) { ScanStore.totalRecords(this@SsidMeasurementActivity, PENDING_SSID_FILE) }
                 if (ssidCount > 0) {
                     tvSsidCount.text = "今回検出: ${ssidCount}件のSSID (${apCount}台)\n未送信データ合計: ${totalRecords}件"
@@ -804,7 +803,7 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
                     val sid = sessionId!!
                     lifecycleScope.launch {
                         withContext(Dispatchers.IO) {
-                            saveToPending(emptyList(), location, scanId, sid, selectedSsids.toList())
+                            saveToPending(emptyList(), location, scanId, sid)
                         }
                         updatePendingCount()
                         if (switchSendMode.isChecked) trySendAllPending()
@@ -851,30 +850,24 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
         }
     }
 
-    private fun saveToPending(accessPoints: List<AccessPoint>, location: Location?, scanId: String, label: String, targetedSsids: List<String>? = emptyList(), scanResults: List<AccessPoint> = emptyList()) {
+    private fun saveToPending(accessPoints: List<AccessPoint>, location: Location?, scanId: String, label: String) {
         val timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
-
-        fun AccessPoint.toScanResultJson() = JSONObject().apply {
-            put("bssid", bssid)
-            put("mld_mac_address", mldMacAddress ?: JSONObject.NULL)
-            put("oui", oui)
-            put("ssids", JSONArray(ssids))
-            put("rssi_dbm", rssiDbm)
-            put("frequency_mhz", frequencyMhz)
-            put("band", band)
-            put("channel_width_mhz", channelWidthMhz)
-            put("wifi_standard", wifiStandard)
-            put("wifi_standard_code", wifiStandardCode)
-            put("security", security)
-            put("capabilities_raw", capabilitiesRaw)
-        }
-
-        val scanResultsArray = JSONArray()
-        for (ap in scanResults) { scanResultsArray.put(ap.toScanResultJson()) }
 
         val apArray = JSONArray()
         for (ap in accessPoints) {
-            apArray.put(ap.toScanResultJson().apply {
+            apArray.put(JSONObject().apply {
+                put("bssid", ap.bssid)
+                put("mld_mac_address", ap.mldMacAddress ?: JSONObject.NULL)
+                put("oui", ap.oui)
+                put("ssids", JSONArray(ap.ssids))
+                put("rssi_dbm", ap.rssiDbm)
+                put("frequency_mhz", ap.frequencyMhz)
+                put("band", ap.band)
+                put("channel_width_mhz", ap.channelWidthMhz)
+                put("wifi_standard", ap.wifiStandard)
+                put("wifi_standard_code", ap.wifiStandardCode)
+                put("security", ap.security)
+                put("capabilities_raw", ap.capabilitiesRaw)
                 put("supplicant_states", JSONArray(ap.supplicantStates))
                 put("supplicant_final_state", ap.supplicantFinalState)
                 put("supplicant_elapsed_ms", ap.supplicantElapsedMs)
@@ -891,8 +884,6 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
             })
             put("scanned_at", timestamp)
             put("label", label)
-            if (targetedSsids != null) put("targeted_ssids", JSONArray(targetedSsids))
-            else put("targeted_ssids", JSONObject.NULL)
             if (location != null) {
                 put("location", JSONObject().apply {
                     put("latitude", location.latitude)
@@ -902,7 +893,6 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
             } else {
                 put("location", JSONObject.NULL)
             }
-            put("scan_results", scanResultsArray)
             put("access_points", apArray)
         }
         ScanStore.append(this, entry, PENDING_SSID_FILE)
@@ -927,7 +917,7 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
                     conn.doOutput = true
                     conn.connectTimeout = 5000
                     conn.readTimeout = 10000
-                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/")) }
+                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/").escapeNonAsciiForJson()) }
                     val code = conn.responseCode
                     Log.d("BeaconScan", "response: $code")
                     conn.disconnect()

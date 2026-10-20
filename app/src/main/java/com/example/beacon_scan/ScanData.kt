@@ -53,6 +53,16 @@ data class AccessPoint(
 // org.json の toString() は / を \/ にエスケープするため、ファイル書き込みと送信前に戻す
 private fun JSONArray.toJsonString() = toString().replace("\\/", "/")
 
+// 非ASCII文字を \uXXXX エスケープに変換する。サーバー側の文字コード設定に依存せず送信できる。
+fun String.escapeNonAsciiForJson(): String {
+    val sb = StringBuilder(this.length * 2)
+    for (c in this) {
+        if (c.code > 127) sb.append("\\u%04x".format(c.code))
+        else sb.append(c)
+    }
+    return sb.toString()
+}
+
 object ScanStore {
     fun load(context: Context, fileName: String = PENDING_FILE): JSONArray {
         val file = File(context.filesDir, fileName)

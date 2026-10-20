@@ -999,7 +999,7 @@ WiFi接続プロセスの状態遷移を記録する機能。
                     conn.doOutput = true
                     conn.connectTimeout = 5000
                     conn.readTimeout = 10000
-                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/")) }
+                    OutputStreamWriter(conn.outputStream, "UTF-8").use { it.write(singleArray.toString().replace("\\/", "/").escapeNonAsciiForJson()) }
                     val code = conn.responseCode
                     Log.d("BeaconScan", "response: $code")
                     conn.disconnect()
