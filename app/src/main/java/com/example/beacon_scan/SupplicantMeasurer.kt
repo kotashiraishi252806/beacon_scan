@@ -152,7 +152,7 @@ class SupplicantMeasurer(
         // 受け皿②：ConnectivityManagerからの接続成否通知を受け取るNetworkCallback
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                finalState = "COMPLETED"
+                finalState = "NETWORK_AVAILABLE"
                 supplicantContinuation?.let { if (it.isActive) it.resume(Unit) }
                 supplicantContinuation = null
                 supplicantCallback = null
@@ -191,13 +191,15 @@ class SupplicantMeasurer(
         val transitions = supplicantTransitions.toList()
 
         finalState = when {
-            stopRequested && finalState != "COMPLETED" -> "CANCELLED"
-            finalState == "COMPLETED"                  -> "COMPLETED"
+            stopRequested && finalState != "NETWORK_AVAILABLE" -> "CANCELLED"
+            finalState == "NETWORK_AVAILABLE"               -> "NETWORK_AVAILABLE"
             unavailableFired && transitions.isEmpty()  -> "NOT_FOUND"
             transitions.isNotEmpty() -> {
                 val last = transitions.last()
                 if (last == "DISCONNECTED" || last == "INACTIVE" || last == "SCANNING") {
                     "FAILED_AT_$last"
+                } else if (last == "COMPLETED") {
+                    "AUTH_COMPLETED"
                 } else {
                     "TIMEOUT_AT_$last"
                 }
