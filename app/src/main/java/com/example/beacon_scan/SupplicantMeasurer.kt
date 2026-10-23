@@ -50,9 +50,8 @@ class SupplicantMeasurer(
     // BroadcastReceiverとコルーチンを繋ぐ橋（受け皿①②からPhase1/2を起こす）
     @Volatile private var supplicantContinuation: kotlinx.coroutines.CancellableContinuation<Unit>? = null
 
-    // 測定停止ボタン押下でtrueになり、次のAPからCANCELLEDにする
-    @Volatile var stopRequested = false
-        private set
+    // OSタイムアウト前にBroadcastReceiverがcont.resume()を呼んだかどうかを示すフラグ
+    @Volatile private var brEarlyExitOccurred = false
 
     // 受け皿①：wpa_supplicantからのSupplicant状態変化を受け取るBroadcastReceiver
     @Suppress("DEPRECATION")
@@ -69,11 +68,17 @@ class SupplicantMeasurer(
             val cont = supplicantContinuation ?: return
             if (!cont.isActive) return
             when (state) {
-                SupplicantState.COMPLETED -> cont.resume(Unit)
+                SupplicantState.COMPLETED -> {
+                    brEarlyExitOccurred = true
+                    cont.resume(Unit)
+                }
                 SupplicantState.DISCONNECTED -> {
                     if (supplicantTransitions.any {
                         it == "ASSOCIATED" || it == "FOUR_WAY_HANDSHAKE" || it == "GROUP_HANDSHAKE"
-                    }) cont.resume(Unit)
+                    }) {
+                        brEarlyExitOccurred = true
+                        cont.resume(Unit)
+                    }
                 }
                 else -> {}
             }
@@ -95,15 +100,6 @@ class SupplicantMeasurer(
         supplicantCallback?.let { runCatching { connectivityManager.unregisterNetworkCallback(it) } }
     }
 
-    // 測定を中断要求する（停止ボタンから呼ぶ）
-    fun requestStop() {
-        stopRequested = true
-        supplicantContinuation?.let { if (it.isActive) it.resume(Unit) }
-        supplicantContinuation = null
-        supplicantCallback?.let { runCatching { connectivityManager.unregisterNetworkCallback(it) } }
-        supplicantCallback = null
-    }
-
     // 全APを順次測定して結果リストを返す
     suspend fun measureAll(
         apList: List<AccessPoint>,
@@ -112,13 +108,8 @@ class SupplicantMeasurer(
         onApFinished: (AccessPoint) -> Unit = {},
         noActivityTimeoutMs: Long = NO_ACTIVITY_TIMEOUT_MS
     ): List<AccessPoint> {
-        stopRequested = false
         val results = mutableListOf<AccessPoint>()
         for ((i, ap) in apList.withIndex()) {
-            if (stopRequested) {
-                results.add(ap.copy(supplicantFinalState = "CANCELLED", supplicantElapsedMs = 0L))
-                continue
-            }
             onProgress(i + 1, apList.size, ap.ssids.firstOrNull() ?: ap.bssid)
             onApStart(ap)
             val result = measureForAp(ap, noActivityTimeoutMs)
@@ -135,6 +126,7 @@ class SupplicantMeasurer(
         val startMs = System.currentTimeMillis()
         supplicantTransitions.clear()
         supplicantContinuation = null
+        brEarlyExitOccurred = false
 
         val specifier = buildSpecifier(ap) ?: return ap.copy(
             supplicantFinalState = "SKIPPED",
@@ -191,20 +183,19 @@ class SupplicantMeasurer(
         val transitions = supplicantTransitions.toList()
 
         finalState = when {
-            stopRequested && finalState != "NETWORK_AVAILABLE" -> "CANCELLED"
-            finalState == "NETWORK_AVAILABLE"               -> "NETWORK_AVAILABLE"
-            unavailableFired && transitions.isEmpty()  -> "NOT_FOUND"
-            transitions.isNotEmpty() -> {
-                val last = transitions.last()
-                if (last == "DISCONNECTED" || last == "INACTIVE" || last == "SCANNING") {
-                    "FAILED_AT_$last"
-                } else if (last == "COMPLETED") {
+            finalState == "NETWORK_AVAILABLE" -> "NETWORK_AVAILABLE"
+            brEarlyExitOccurred -> {
+                if (transitions.isNotEmpty() && transitions.last() == "COMPLETED") {
                     "AUTH_COMPLETED"
                 } else {
-                    "TIMEOUT_AT_$last"
+                    val prevState = if (transitions.size >= 2) transitions[transitions.size - 2] else transitions.last()
+                    "PRE_OSTIMEOUT_$prevState"
                 }
             }
-            else -> "FAILED_AT_DIALOG_TIMEOUT"
+            unavailableFired && transitions.isEmpty()  -> "OSTIMEOUT_NOSUPPLICANT"
+            unavailableFired && transitions.isNotEmpty() -> "OSTIMEOUT_${transitions.last()}"
+            transitions.isEmpty() -> "COREBACKTIMEOUT_NOSUPPLICANT"
+            else -> "COREBACKTIMEOUT_${transitions.last()}"
         }
 
         return ap.copy(

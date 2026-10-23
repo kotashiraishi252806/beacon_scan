@@ -221,7 +221,6 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         }
 
         btnStopMeasurement.setOnClickListener {
-            measurer.requestStop()
             btnStopMeasurement.isEnabled = false
             btnStopMeasurement.text = "中断中..."
         }
