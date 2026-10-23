@@ -604,60 +604,268 @@
 
 </div>
 
+<!-- ══════════════════════════
+     S7 現状のfinalstate判定条件の問題点
+══════════════════════════ -->
 <div class="slide" style="overflow-y: auto;">
-  <div class="label">考察</div>
-  <h2>タイムアウト時間を短くするとNOTFOUNDになるBSSID数が増加する考察</h2>
+  <div class="label">問題点</div>
+  <h2>現状のfinalstate判定条件の問題点</h2>
   <hr class="rule">
 
-  <div class="hbox" style="font-size:14px; margin-bottom:14px;">
-    <strong>観測事実</strong><br>
-    OSタイムアウトを 1s / 3s / 5s と長くするほど、<code>NOT_FOUND</code> になるBSSID数が減少した
-    （屋内 set1：13→10→9、屋外 set2：20→11→3）。
+  <!-- 終了条件×finalstate 対応表 -->
+  <div style="margin-bottom:18px;">
+    <div style="font-size:13px; font-weight:700; color:#1d57b0; margin-bottom:8px;">接続試行の終了条件と付与される可能性のある finalState</div>
+    <table style="font-size:12px;">
+      <tr>
+        <th style="width:4%;">#</th>
+        <th style="width:38%;">終了条件</th>
+        <th style="width:58%;">付与される可能性のある finalState</th>
+      </tr>
+      <tr>
+        <td>1</td>
+        <td><code>SUPPLICANT_STATE_CHANGED_ACTION</code> で <code>COMPLETED</code> を受信</td>
+        <td><span class="fs fs-ok">AUTH_COMPLETED</span></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><code>SUPPLICANT_STATE_CHANGED_ACTION</code> で <code>DISCONNECTED</code> を受信（<code>ASSOCIATED</code> 等を経た場合）</td>
+        <td><span class="fs fs-fail">FAILED_AT_DISCONNECTED</span></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><code>onAvailable()</code> が発火</td>
+        <td><span class="fs fs-ok">NETWORK_AVAILABLE</span></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td><code>onUnavailable()</code> が発火（OSタイムアウト 3 s）</td>
+        <td>
+          <span class="fs fs-none">NOT_FOUND</span>
+          <span class="fs fs-fail">FAILED_AT_DISCONNECTED</span>
+          <span class="fs fs-fail">FAILED_AT_INACTIVE</span>
+          <span class="fs fs-fail">FAILED_AT_SCANNING</span>
+          <span class="fs fs-tout">TIMEOUT_AT_&lt;STATE&gt;</span>
+          <span class="fs fs-ok">AUTH_COMPLETED</span>
+        </td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td><code>withTimeoutOrNull(10_000)</code> の 10 秒タイムアウト（フォールバック）</td>
+        <td>
+          <span class="fs fs-fail">FAILED_AT_DIALOG_TIMEOUT</span>
+          <span class="fs fs-fail">FAILED_AT_DISCONNECTED</span>
+          <span class="fs fs-fail">FAILED_AT_INACTIVE</span>
+          <span class="fs fs-fail">FAILED_AT_SCANNING</span>
+          <span class="fs fs-tout">TIMEOUT_AT_&lt;STATE&gt;</span>
+        </td>
+      </tr>
+    </table>
   </div>
 
-  <div class="hbox orange" style="font-size:14px; margin-bottom:14px;">
-    <strong>前提：NOT_FOUNDになる3条件（P5参照）</strong><br>
-    <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">①</span>
-    <code>buildSpecifier</code> が非 null（接続試行を行った）<br>
-    <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">②</span>
-    <code>transitions.isEmpty()</code>（wpa_supplicant が状態遷移を1件も送出しなかった）<br>
-    <span style="background:#1d57b0;color:white;border-radius:50%;padding:1px 6px;font-size:12px;margin-right:4px;">③</span>
-    <code>unavailableFired == true</code>（OSから接続不可通知が来た）
+  <!-- 問題点 -->
+  <div style="font-size:13px; font-weight:700; color:#1d57b0; margin-bottom:8px;">修正が必要な点</div>
+  <div style="display:flex; flex-direction:column; gap:10px;">
+
+    <div class="hbox red" style="font-size:13px;">
+      <strong>問題① 終了条件2・4・5 の FAILED_AT_DISCONNECTED が区別できない</strong><br>
+      終了条件2（<code>ASSOCIATED</code> 等を経た <code>DISCONNECTED</code> 受信による早期終了）と、
+      終了条件4（<code>onUnavailable()</code> 発火後に最後の状態が <code>DISCONNECTED</code>）と、
+      終了条件5（10 s タイムアウト後に最後の状態が <code>DISCONNECTED</code>）に対し、
+      同一の <span class="fs fs-fail" style="font-size:11px;">FAILED_AT_DISCONNECTED</span> が付与される。
+      3つの名称を作り、それぞれの状態が一意に定まる条件式を定義する必要がある。
+    </div>
+
+    <div class="hbox red" style="font-size:13px;">
+      <strong>問題② 終了条件4（OSタイムアウト）と終了条件5（フォールバックタイムアウト）が finalState から判別できない</strong><br>
+      <span class="fs fs-fail" style="font-size:11px;">FAILED_AT_DISCONNECTED</span>
+      <span class="fs fs-fail" style="font-size:11px;">FAILED_AT_INACTIVE</span>
+      <span class="fs fs-fail" style="font-size:11px;">FAILED_AT_SCANNING</span>
+      <span class="fs fs-tout" style="font-size:11px;">TIMEOUT_AT_&lt;STATE&gt;</span>
+      はいずれも終了条件4・5どちらでも付与されうる。
+      どちらのタイムアウトで終了したかが finalState から判断できない。名前と分岐条件を再定義する必要がある。
+    </div>
+
+    <div class="hbox red" style="font-size:13px;">
+      <strong>問題③ OSタイムアウトの情報が finalState に含まれていない</strong><br>
+      現状、「OSタイムアウト（3 s）内にサプリカント状態が記録されたのか」と
+      「OSタイムアウトによって終了したのか」が finalState から区別できない。
+      OSタイムアウトは測定上最も重要なイベントであるため、
+      OSタイムアウト内での記録か否かを一意に判定できる条件式を作る必要がある。
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════
+     S8 提案フローチャート（日本語）
+══════════════════════════ -->
+<div class="slide" style="overflow:auto; padding:30px 40px 20px; display:block;">
+  <div class="label">提案フローチャート</div>
+  <h2>finalstate 判定フロー（日本語）</h2>
+  <p style="font-size:12px; color:#667; margin-bottom:8px;">ひし形が判定条件、四角が付与される finalstate。</p>
+  <hr class="rule">
+
+  <!-- スライド説明文 -->
+  <div id="p8-description" style="font-size:14px; color:#334; line-height:1.8; margin-bottom:18px;">
+    このスライドは 2026-10-23 に行った議論をまとめています。最終的なゴールは「OSタイムアウトを何秒に設定すれば検出したAPのサプリカント状態を取得できるのか？」という疑問に答えることです。そもそもこの疑問に答えたいニーズは「無線LAN環境を把握するために取得できるデータはできるだけ集めたい」という根本的な研究目的に起因します。<br><br>
+    この疑問に答えるための方法として、実際にタイムアウト時間を設定してサプリカントを取得してみることが考えられます。測定アプリを使用してデータを取得する場合、取得したデータに「どのような認証手続きプロセスを経て取得されたのか」という情報を付与する必要があります。なぜなら、そのサプリカント状態が「認証手続きがタイムアウト内に完了し取得できたのか」「タイムアウトによって中断されたサプリカント状態なのか」という情報が、疑問に回答できる情報だからです。<br><br>
+    疑問に回答する情報には、根拠となる情報を付与できる仕組みが必要です。その仕組みが下のフローチャートです。
   </div>
 
-  <div style="font-size:16px; font-weight:700; color:#1d57b0; margin-bottom:10px;">
-    仮説：タイムアウトが短いと、OSが <code>onUnavailable()</code> を発火させるまでの間に
-    wpa_supplicant がAP探索・状態遷移を開始できない
+  <div style="overflow-x:auto;">
+  <svg viewBox="0 0 1160 890" width="1740" height="1335" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="fc-arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L0,8 L8,4 z" fill="#888"/>
+      </marker>
+    </defs>
+
+    <!-- START -->
+    <rect x="300" y="12" width="140" height="34" rx="5" fill="#0d1f45"/>
+    <text x="370" y="34" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="13" fill="white" font-weight="700">接続試行 開始</text>
+    <line x1="370" y1="46" x2="370" y2="64" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+
+    <!-- D1: 接続試行を開始できなかったか -->
+    <polygon points="235,95 370,67 505,95 370,123" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="90" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">接続試行を</text>
+    <text x="370" y="105" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">開始できなかったか</text>
+    <!-- D1 はい → スキップ -->
+    <line x1="505" y1="95" x2="571" y2="95" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="536" y="89" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="576" y="78" width="120" height="34" rx="5" fill="#f2f3f6" stroke="#889" stroke-width="1.5"/>
+    <text x="636" y="100" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="12" fill="#334">スキップ ①</text>
+    <!-- D1 いいえ ↓ -->
+    <line x1="370" y1="123" x2="370" y2="152" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="380" y="140" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+
+    <!-- D2: OSからネットワーク接続確立の通知を受けたか -->
+    <polygon points="235,180 370,152 505,180 370,208" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="175" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">OSからネットワーク接続確立の</text>
+    <text x="370" y="190" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">通知を受けたか</text>
+    <!-- D2 はい → ネットワーク接続確立 -->
+    <line x1="505" y1="180" x2="561" y2="180" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="531" y="174" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="566" y="163" width="195" height="34" rx="5" fill="#eef7f0" stroke="#237038" stroke-width="1.5"/>
+    <text x="664" y="185" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="12" fill="#1a3020">ネットワーク接続確立 ②</text>
+    <!-- D2 いいえ ↓ D4 -->
+    <line x1="370" y1="208" x2="370" y2="317" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="380" y="262" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+
+    <!-- D4: OSタイムアウト前にBroadcastReceiverが終了させたか -->
+    <polygon points="235,345 370,317 505,345 370,373" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="336" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#1a2040">OSタイムアウト前に</text>
+    <text x="370" y="349" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#1a2040">BroadcastReceiverが</text>
+    <text x="370" y="362" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#1a2040">終了させたか</text>
+    <!-- D4 はい → Sub-D4a -->
+    <line x1="505" y1="345" x2="581" y2="345" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="541" y="339" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+
+    <!-- Sub-D4a: COMPLETEDを受信したか (hw=115, hh=26) -->
+    <polygon points="585,345 700,319 815,345 700,371" fill="white" stroke="#1d57b0" stroke-width="1.5"/>
+    <text x="700" y="349" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">COMPLETEDを受信したか</text>
+    <!-- Sub-D4a はい → タイムアウト前・認証完了 -->
+    <line x1="815" y1="345" x2="876" y2="345" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="843" y="339" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="881" y="327" width="185" height="38" rx="5" fill="#eef4ff" stroke="#1d57b0" stroke-width="1.5"/>
+    <text x="974" y="341" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">タイムアウト前</text>
+    <text x="974" y="357" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">認証完了 ③</text>
+    <!-- Sub-D4a いいえ ↓ タイムアウト前・接続試行終了① -->
+    <line x1="700" y1="371" x2="700" y2="402" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="710" y="390" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+    <rect x="570" y="406" width="260" height="38" rx="5" fill="#fdf3ea" stroke="#b86020" stroke-width="1.5"/>
+    <text x="700" y="420" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">タイムアウト前</text>
+    <text x="700" y="436" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">&lt;直前認証状態&gt;_DISCONNECTED ④</text>
+
+    <!-- D4 いいえ ↓ D5 -->
+    <line x1="370" y1="373" x2="370" y2="610" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="380" y="495" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+
+    <!-- D5: OSから3秒後に接続不可の通知を受けたか -->
+    <polygon points="235,638 370,610 505,638 370,666" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="633" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">OSから3秒後に接続不可の</text>
+    <text x="370" y="648" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">通知を受けたか</text>
+    <!-- D5 はい → Sub-D5 -->
+    <line x1="505" y1="638" x2="586" y2="638" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="543" y="632" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <!-- Sub-D5: 状態記録が1件もないか (hw=110, hh=24) -->
+    <polygon points="590,638 700,614 810,638 700,662" fill="#fff0f0" stroke="#b03030" stroke-width="1.5"/>
+    <text x="700" y="633" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a0a0a">状態記録が</text>
+    <text x="700" y="648" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a0a0a">1件もないか</text>
+    <!-- Sub-D5 はい ↓ OSタイムアウト終了・APなし -->
+    <line x1="700" y1="662" x2="700" y2="692" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="710" y="680" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="610" y="696" width="180" height="38" rx="5" fill="#fdf0f0" stroke="#b03030" stroke-width="1.5"/>
+    <text x="700" y="710" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a0a0a">OSタイムアウト終了</text>
+    <text x="700" y="726" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a0a0a">APなし ⑤</text>
+    <!-- Sub-D5 いいえ → OSタイムアウト終了・最後の状態で終了 -->
+    <line x1="810" y1="638" x2="856" y2="638" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="831" y="632" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+    <rect x="861" y="620" width="200" height="38" rx="5" fill="#fdf0f0" stroke="#b03030" stroke-width="1.5"/>
+    <text x="961" y="634" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a0a0a">OSタイムアウト終了</text>
+    <text x="961" y="650" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a0a0a">最後の状態で終了 ⑥</text>
+    <!-- D5 いいえ ↓ D6 -->
+    <line x1="370" y1="666" x2="370" y2="748" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="380" y="710" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+
+    <!-- D6: サプリカント状態の記録があるか -->
+    <polygon points="235,776 370,748 505,776 370,804" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="771" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">サプリカント状態の</text>
+    <text x="370" y="786" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">記録があるか</text>
+    <!-- D6 はい → 10sタイムアウト・最後の状態 -->
+    <line x1="505" y1="776" x2="561" y2="776" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="531" y="770" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="566" y="758" width="210" height="38" rx="5" fill="#fdf3ea" stroke="#b86020" stroke-width="1.5"/>
+    <text x="671" y="772" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">10sタイムアウト</text>
+    <text x="671" y="788" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">最後の状態 ⑦</text>
+    <!-- D6 いいえ ↓ 10sタイムアウト・状態記録なし（不明） -->
+    <line x1="370" y1="804" x2="370" y2="833" stroke="#888" stroke-width="1.5" marker-end="url(#fc-arr)"/>
+    <text x="380" y="821" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+    <rect x="255" y="837" width="230" height="38" rx="5" fill="#f2f3f6" stroke="#889" stroke-width="1.5"/>
+    <text x="370" y="851" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#334">10sタイムアウト</text>
+    <text x="370" y="867" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#334">状態記録なし（不明）⑧</text>
+
+  </svg>
   </div>
 
-  <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
-    <div class="card">
-      <div class="card-title">理由①　requestNetwork() は内部スキャンを引き起こす</div>
-      <div style="color:#334; line-height:1.8;">
-        <code>requestNetwork()</code> を呼ぶと、OSはwpa_supplicantへ接続指示を出す前に
-        <code>WifiNetworkSpecifier</code> に合致するAPを探索する内部処理を行う。
-        この内部スキャンには一定の処理時間が必要である。
-      </div>
+  <div style="margin-top:14px; font-size:12px; color:#334; line-height:2.0;">
+    <div style="font-size:13px; font-weight:700; color:#1d57b0; margin-bottom:8px;">
+      finalState 一覧（①〜⑧）― 1台のAPへの接続試行がどの終了条件で終わったか、およびそのときのサプリカント状態取得状況を一意に示す分類
     </div>
-    <div class="card">
-      <div class="card-title">理由②　タイムアウトが短いと内部処理完了前に onUnavailable() が発火する</div>
-      <div style="color:#334; line-height:1.8;">
-        OSタイムアウトが短い（例：1s）場合、内部スキャンが完了する前にタイムアウトが切れ
-        <code>onUnavailable()</code> が発火する。
-        その結果、wpa_supplicantへの接続指示がそもそも届かないか、
-        届いたとしても状態遷移を1件も起こす時間がないまま終了する。
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">結果</div>
-      <div style="color:#334; line-height:1.8;">
-        条件②（<code>transitions.isEmpty()</code>）・条件③（<code>unavailableFired==true</code>）が
-        そろいやすくなり、NOT_FOUNDになるケースが増加する。<br>
-        逆にタイムアウトが長い（例：5s）場合は、内部処理が完了してwpa_supplicantが
-        少なくとも1件の状態遷移（例：SCANNING → ASSOCIATING）を起こす時間が確保できるため、
-        NOT_FOUNDではなく <code>FAILED_AT_&lt;STATE&gt;</code> になるケースが増える。
-      </div>
-    </div>
+    <table style="font-size:12px; border-collapse:collapse;">
+      <tr><th style="background:#1d57b0;color:white;padding:6px 14px;text-align:center;width:40px;">番号</th><th style="background:#1d57b0;color:white;padding:6px 14px;text-align:left;">finalState</th><th style="background:#1d57b0;color:white;padding:6px 14px;text-align:left;">意味</th></tr>
+      <tr><td style="padding:5px 14px;text-align:center;border-bottom:1px solid #e4e8f0;">①</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;font-family:'Courier New',monospace;">SKIPPED</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;">接続試行を開始できなかった（WEP等の非対応セキュリティ種別、またはBSSIDパース失敗）</td></tr>
+      <tr><td style="padding:5px 14px;text-align:center;border-bottom:1px solid #e4e8f0;background:#fafbfd;">②</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;background:#fafbfd;font-family:'Courier New',monospace;">NETWORK_AVAILABLE</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;background:#fafbfd;">OSからネットワーク接続確立の通知（onAvailable）を受けた</td></tr>
+      <tr><td style="padding:5px 14px;text-align:center;border-bottom:1px solid #e4e8f0;">③</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;font-family:'Courier New',monospace;">AUTH_COMPLETED</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;">OSタイムアウト（3s）前に、BroadcastReceiverがCOMPLETEDを受信して接続試行を終了した</td></tr>
+      <tr><td style="padding:5px 14px;text-align:center;border-bottom:1px solid #e4e8f0;background:#fafbfd;">④</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;background:#fafbfd;font-family:'Courier New',monospace;">PRE_OSTIMEOUT_&lt;直前状態&gt;</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;background:#fafbfd;">OSタイムアウト（3s）前に、BroadcastReceiverが認証途中（ASSOCIATED等）でDISCONNECTEDを受信して接続試行を終了した。直前の認証状態をfinalState文字列に含む</td></tr>
+      <tr><td style="padding:5px 14px;text-align:center;border-bottom:1px solid #e4e8f0;">⑤</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;font-family:'Courier New',monospace;">OSTIMEOUT_NOSUPPLICANT</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;">3sOSタイムアウトが発火し、サプリカント状態の記録が0件だった（wpa_supplicantが接続シーケンスを開始しなかった）</td></tr>
+      <tr><td style="padding:5px 14px;text-align:center;border-bottom:1px solid #e4e8f0;background:#fafbfd;">⑥</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;background:#fafbfd;font-family:'Courier New',monospace;">OSTIMEOUT_&lt;最後の状態&gt;</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;background:#fafbfd;">3sOSタイムアウトが発火し、サプリカント状態の記録が1件以上あった</td></tr>
+      <tr><td style="padding:5px 14px;text-align:center;border-bottom:1px solid #e4e8f0;">⑦</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;font-family:'Courier New',monospace;">COREBACKTIMEOUT_&lt;最後の状態&gt;</td><td style="padding:5px 14px;border-bottom:1px solid #e4e8f0;">10sフォールバックタイムアウトが発火し、サプリカント状態の記録が1件以上あった</td></tr>
+      <tr><td style="padding:5px 14px;text-align:center;">⑧</td><td style="padding:5px 14px;font-family:'Courier New',monospace;">COREBACKTIMEOUT_NOSUPPLICANT</td><td style="padding:5px 14px;">10sフォールバックタイムアウトが発火し、サプリカント状態の記録が0件だった。接続試行が行われなかったのかアプリ側の問題なのか判別不能</td></tr>
+    </table>
+
+    <div style="margin-top:18px; font-size:13px; font-weight:700; color:#1d57b0; margin-bottom:8px;">実装内容</div>
+    <table style="font-size:12px; border-collapse:collapse; width:100%; margin-bottom:18px;">
+      <tr>
+        <th style="background:#1d57b0;color:white;padding:6px 14px;text-align:center;width:30px;">#</th>
+        <th style="background:#1d57b0;color:white;padding:6px 14px;text-align:left;">内容</th>
+      </tr>
+      <tr>
+        <td style="padding:6px 14px;text-align:center;border-bottom:1px solid #e4e8f0;vertical-align:top;">1</td>
+        <td style="padding:6px 14px;border-bottom:1px solid #e4e8f0;">BR早期終了を示す専用フラグ（例：<code>brEarlyExitOccurred</code>）を追加し、BroadcastReceiverが <code>cont.resume()</code> を呼んだ時点で <code>true</code> にする</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 14px;text-align:center;background:#fafbfd;vertical-align:top;">2</td>
+        <td style="padding:6px 14px;background:#fafbfd;">finalState文字列への状態名の埋め込み形式を統一する。④は <code>FAILED_AT_&lt;直前認証状態&gt;</code>（直前認証状態は <code>supplicantTransitions[size - 2]</code> を参照）、⑥は <code>OS_TIMEOUT_AT_&lt;最後の状態&gt;</code>、⑦は <code>FALLBACK_TIMEOUT_AT_&lt;最後の状態&gt;</code> とし、最後の状態は <code>supplicantTransitions.last()</code> を参照する</td>
+      </tr>
+    </table>
+
+    <div style="margin-top:18px; font-size:13px; font-weight:700; color:#b03030; margin-bottom:8px;">実装上のリスク・未決事項</div>
+    <table style="font-size:12px; border-collapse:collapse; width:100%;">
+      <tr>
+        <th style="background:#b03030;color:white;padding:6px 14px;text-align:center;width:30px;">#</th>
+        <th style="background:#b03030;color:white;padding:6px 14px;text-align:left;">内容</th>
+      </tr>
+    </table>
   </div>
 </div>
 
