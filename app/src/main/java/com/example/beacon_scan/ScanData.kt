@@ -31,6 +31,8 @@ const val KEY_SECURITY_SEND_MODE = "security_send_mode"
 const val DEFAULT_SECURITY_SERVER_URL = "http://192.168.11.119:8081/test_receive2.php"
 const val AUTO_SCAN_INTERVAL_MS = 5_000L
 
+data class SupplicantStateEntry(val state: String, val elapsedMs: Long)
+
 data class AccessPoint(
     val bssid: String,
     val mldMacAddress: String?,
@@ -45,7 +47,7 @@ data class AccessPoint(
     val security: String,
     val capabilitiesRaw: String,
     val securityTypesRaw: List<Int> = emptyList(),
-    val supplicantStates: List<String> = emptyList(),
+    val supplicantStates: List<SupplicantStateEntry> = emptyList(),
     val supplicantFinalState: String = "NOT_MEASURED",
     val supplicantElapsedMs: Long = -1L
 )

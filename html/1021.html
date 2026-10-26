@@ -869,6 +869,90 @@
   </div>
 </div>
 
+<!-- ══════════════════════════
+     S9 方針変更：直接計測方式へ
+══════════════════════════ -->
+<div class="slide" style="overflow-y: auto;">
+  <div class="label">方針変更</div>
+  <h2>接続試行測定の設計方針変更</h2>
+  <hr class="rule">
+
+  <!-- 旧方針 -->
+  <div class="hbox red" style="font-size:13px; margin-bottom:12px;">
+    <strong>旧方針（〜2026-10-26）</strong><br>
+    OSタイムアウトの値（上限）を変化させることで「その時間内にサプリカント状態がどこまで進めるか」を間接的に推測する。<br>
+    問題点：OSタイムアウト到達が終了条件の主体であるため、取得に要した実際の時間は記録されない。
+    1台のAPにつき最低でもOSタイムアウト時間（3 s）は消費する。
+  </div>
+
+  <!-- 新方針 -->
+  <div class="hbox green" style="font-size:13px; margin-bottom:12px;">
+    <strong>新方針（2026-10-26〜）</strong><br>
+    OSタイムアウトを10秒（十分なマージン）に固定し、BroadcastReceiverが
+    <code>SUPPLICANT_STATE_CHANGED_ACTION</code> を受信するたびに、
+    接続試行開始からの経過時間（ms）を状態名とともに記録する。<br>
+    目的：「各サプリカント状態に到達するまでに何msかかったか」を直接計測する。
+  </div>
+
+  <!-- 変更点一覧 -->
+  <div style="font-size:13px; font-weight:700; color:#1d57b0; margin-bottom:8px;">実装変更点</div>
+  <table style="font-size:12px; margin-bottom:14px;">
+    <tr>
+      <th style="width:5%; text-align:center;">#</th>
+      <th style="width:35%;">変更前</th>
+      <th style="width:35%;">変更後</th>
+      <th style="width:25%;">対象ファイル</th>
+    </tr>
+    <tr>
+      <td style="text-align:center;">1</td>
+      <td><code>NO_ACTIVITY_TIMEOUT_MS = 3_000L</code></td>
+      <td><code>NO_ACTIVITY_TIMEOUT_MS = 10_000L</code></td>
+      <td><code>SupplicantMeasurer.kt</code></td>
+    </tr>
+    <tr>
+      <td style="text-align:center;">2</td>
+      <td><code>supplicantTransitions: List&lt;String&gt;</code><br>状態名のみ記録</td>
+      <td><code>supplicantTransitions: List&lt;SupplicantStateEntry&gt;</code><br>状態名 + 経過時間(ms)を記録</td>
+      <td><code>SupplicantMeasurer.kt</code><br><code>ScanData.kt</code></td>
+    </tr>
+    <tr>
+      <td style="text-align:center;">3</td>
+      <td>BroadcastReceiver: <code>transitions.add(state.name)</code></td>
+      <td><code>transitions.add(SupplicantStateEntry(state.name, System.currentTimeMillis() - measureStartMs))</code></td>
+      <td><code>SupplicantMeasurer.kt</code></td>
+    </tr>
+    <tr>
+      <td style="text-align:center;">4</td>
+      <td>UIでOSタイムアウトを 1s / 3s / 5s から選択可能</td>
+      <td>選択UIを削除。OSタイムアウトは定数 10s に統一</td>
+      <td><code>ConnectionMeasurementActivity.kt</code><br><code>activity_main.xml</code></td>
+    </tr>
+    <tr>
+      <td style="text-align:center;">5</td>
+      <td><code>supplicant_states: ["DISCONNECTED", "SCANNING", ...]</code></td>
+      <td><code>supplicant_states: [{"state":"DISCONNECTED","elapsed_ms":12}, {"state":"SCANNING","elapsed_ms":45}, ...]</code></td>
+      <td><code>SsidMeasurementActivity.kt</code><br><code>ConnectionMeasurementActivity.kt</code></td>
+    </tr>
+  </table>
+
+  <!-- 記録例 -->
+  <div style="font-size:13px; font-weight:700; color:#1d57b0; margin-bottom:8px;">記録例（WPA2 APへの接続試行）</div>
+  <div style="background:white; border:1px solid #dde3ee; border-radius:8px; padding:14px 18px; font-family:'Courier New',monospace; font-size:12px; color:#334; line-height:2.0;">
+    <span style="color:#667;">// supplicant_states フィールドの値</span><br>
+    [<br>
+    &nbsp;&nbsp;{ "state": "DISCONNECTED",&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#1d57b0;">"elapsed_ms": 8</span>  },<br>
+    &nbsp;&nbsp;{ "state": "SCANNING",&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#1d57b0;">"elapsed_ms": 41</span> },<br>
+    &nbsp;&nbsp;{ "state": "AUTHENTICATING",&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#1d57b0;">"elapsed_ms": 312</span>},<br>
+    &nbsp;&nbsp;{ "state": "ASSOCIATING",&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#1d57b0;">"elapsed_ms": 318</span>},<br>
+    &nbsp;&nbsp;{ "state": "ASSOCIATED",&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#1d57b0;">"elapsed_ms": 401</span>},<br>
+    &nbsp;&nbsp;{ "state": "FOUR_WAY_HANDSHAKE",&nbsp;<span style="color:#1d57b0;">"elapsed_ms": 403</span>},<br>
+    &nbsp;&nbsp;{ "state": "COMPLETED",&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#1d57b0;">"elapsed_ms": 612</span>}<br>
+    ]<br>
+    <span style="color:#667;">// supplicant_final_state: "AUTH_COMPLETED"</span><br>
+    <span style="color:#667;">// supplicant_elapsed_ms: 613</span>
+  </div>
+</div>
+
 </div><!-- #deck -->
 
 <div id="nav">

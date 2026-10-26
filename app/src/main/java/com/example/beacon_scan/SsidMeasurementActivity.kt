@@ -867,7 +867,14 @@ SSIDを選択すると、配下の全BSSIDを順番に接続試行します。
                 put("wifi_standard_code", ap.wifiStandardCode)
                 put("security", ap.security)
                 put("capabilities_raw", ap.capabilitiesRaw)
-                put("supplicant_states", JSONArray(ap.supplicantStates))
+                put("supplicant_states", JSONArray().also { arr ->
+                    ap.supplicantStates.forEach { entry ->
+                        arr.put(JSONObject().apply {
+                            put("state", entry.state)
+                            put("elapsed_ms", entry.elapsedMs)
+                        })
+                    }
+                })
                 put("supplicant_final_state", ap.supplicantFinalState)
                 put("supplicant_elapsed_ms", ap.supplicantElapsedMs)
             })

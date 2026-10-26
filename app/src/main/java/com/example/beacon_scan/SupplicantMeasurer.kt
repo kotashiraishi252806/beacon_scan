@@ -24,7 +24,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 private const val DIALOG_TIMEOUT_MS = 10_000L
-private const val NO_ACTIVITY_TIMEOUT_MS = 3_000L
+private const val NO_ACTIVITY_TIMEOUT_MS = 10_000L
 private const val DUMMY_PASSPHRASE = "DUMMY_MEAS_12345"
 
 /**
@@ -42,7 +42,10 @@ class SupplicantMeasurer(
     private val connectivityManager: ConnectivityManager
 ) {
     // AP1件の測定中に届いたSupplicant状態遷移を順番に記録するリスト
-    private val supplicantTransitions = mutableListOf<String>()
+    private val supplicantTransitions = mutableListOf<SupplicantStateEntry>()
+
+    // measureForAp開始時刻（supplicantReceiverから経過時間を計算するために使用）
+    @Volatile private var measureStartMs: Long = 0L
 
     // 現在アクティブなNetworkCallback(cb)の参照（解除時に使用）
     @Volatile private var supplicantCallback: ConnectivityManager.NetworkCallback? = null
@@ -64,7 +67,7 @@ class SupplicantMeasurer(
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra<SupplicantState>(WifiManager.EXTRA_NEW_STATE)
             } ?: return
-            supplicantTransitions.add(state.name)
+            supplicantTransitions.add(SupplicantStateEntry(state.name, System.currentTimeMillis() - measureStartMs))
             val cont = supplicantContinuation ?: return
             if (!cont.isActive) return
             when (state) {
@@ -74,7 +77,7 @@ class SupplicantMeasurer(
                 }
                 SupplicantState.DISCONNECTED -> {
                     if (supplicantTransitions.any {
-                        it == "ASSOCIATED" || it == "FOUR_WAY_HANDSHAKE" || it == "GROUP_HANDSHAKE"
+                        it.state == "ASSOCIATED" || it.state == "FOUR_WAY_HANDSHAKE" || it.state == "GROUP_HANDSHAKE"
                     }) {
                         brEarlyExitOccurred = true
                         cont.resume(Unit)
@@ -124,6 +127,7 @@ class SupplicantMeasurer(
     @Suppress("DEPRECATION")
     private suspend fun measureForAp(ap: AccessPoint, noActivityTimeoutMs: Long = NO_ACTIVITY_TIMEOUT_MS): AccessPoint {
         val startMs = System.currentTimeMillis()
+        measureStartMs = startMs
         supplicantTransitions.clear()
         supplicantContinuation = null
         brEarlyExitOccurred = false
@@ -185,17 +189,17 @@ class SupplicantMeasurer(
         finalState = when {
             finalState == "NETWORK_AVAILABLE" -> "NETWORK_AVAILABLE"
             brEarlyExitOccurred -> {
-                if (transitions.isNotEmpty() && transitions.last() == "COMPLETED") {
+                if (transitions.isNotEmpty() && transitions.last().state == "COMPLETED") {
                     "AUTH_COMPLETED"
                 } else {
-                    val prevState = if (transitions.size >= 2) transitions[transitions.size - 2] else transitions.last()
+                    val prevState = if (transitions.size >= 2) transitions[transitions.size - 2].state else transitions.last().state
                     "PRE_OSTIMEOUT_$prevState"
                 }
             }
             unavailableFired && transitions.isEmpty()  -> "OSTIMEOUT_NOSUPPLICANT"
-            unavailableFired && transitions.isNotEmpty() -> "OSTIMEOUT_${transitions.last()}"
+            unavailableFired && transitions.isNotEmpty() -> "OSTIMEOUT_${transitions.last().state}"
             transitions.isEmpty() -> "COREBACKTIMEOUT_NOSUPPLICANT"
-            else -> "COREBACKTIMEOUT_${transitions.last()}"
+            else -> "COREBACKTIMEOUT_${transitions.last().state}"
         }
 
         return ap.copy(
