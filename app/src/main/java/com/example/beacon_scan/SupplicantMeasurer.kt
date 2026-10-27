@@ -183,7 +183,7 @@ class SupplicantMeasurer(
                     "AUTH_COMPLETED"
                 } else {
                     val prevState = if (transitions.size >= 2) transitions[transitions.size - 2].state else transitions.last().state
-                    "PRE_OSTIMEOUT_$prevState"
+                    "PRE_TIMEOUT_$prevState"
                 }
             }
             else -> {

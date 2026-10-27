@@ -932,7 +932,7 @@
     <line x1="703" y1="304" x2="703" y2="332" stroke="#888" stroke-width="1.5" marker-end="url(#p9-arr)"/>
     <text x="713" y="321" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
     <rect x="573" y="336" width="260" height="38" rx="5" fill="#fdf3ea" stroke="#b86020" stroke-width="1.5"/>
-    <text x="703" y="351" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">PRE_OSTIMEOUT_&lt;直前状態&gt; ④</text>
+    <text x="703" y="351" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">PRE_TIMEOUT_&lt;直前状態&gt; ④</text>
 
     <!-- D3 いいえ ↓ D4 （10秒コルーチンタイムアウト後） -->
     <line x1="370" y1="304" x2="370" y2="418" stroke="#888" stroke-width="1.5" marker-end="url(#p9-arr)"/>
@@ -961,10 +961,10 @@
     <div class="hbox" style="flex:1;">
       <strong>D3 はい の発火条件（brEarlyExitOccurred = true）</strong><br>
       条件A：<code>SupplicantState.COMPLETED</code> を受信<br>
-      条件B：<code>SupplicantState.DISCONNECTED</code> を受信 かつ それ以前に <code>ASSOCIATED</code> / <code>FOUR_WAY_HANDSHAKE</code> / <code>GROUP_HANDSHAKE</code> のいずれかを受信済み
+      条件B：<code>SupplicantState.DISCONNECTED</code> を受信 かつ それ以前に <code>ASSOCIATING</code> / <code>ASSOCIATED</code> / <code>FOUR_WAY_HANDSHAKE</code> / <code>GROUP_HANDSHAKE</code> のいずれかを受信済み
     </div>
     <div class="hbox gray" style="flex:1;">
-      <strong>④ &lt;直前状態&gt;</strong>：<code>transitions[size-2].state</code>（末尾から2番目）<br>
+      <strong>④ &lt;直前状態&gt;</strong>：<code>transitions[size-2].state</code>（末尾から2番目。size &lt; 2 の場合は <code>transitions.last().state</code>）<br>
       <strong>⑤ &lt;最も認証進捗が高い状態&gt;</strong>：<code>mostAdvancedState()</code> の戻り値<br>
       ランク：DISCONNECTED(0) &lt; INACTIVE(1) &lt; SCANNING(2) &lt; AUTHENTICATING(3) &lt; ASSOCIATING(4) &lt; ASSOCIATED(5) &lt; FOUR_WAY_HANDSHAKE(6) &lt; GROUP_HANDSHAKE(7) &lt; COMPLETED(8)。ランク外（例：INTERFACE_DISABLED）はランク −1。
     </div>
