@@ -24,7 +24,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 private const val DIALOG_TIMEOUT_MS = 10_000L
-private const val NO_ACTIVITY_TIMEOUT_MS = 10_000L
 private const val DUMMY_PASSPHRASE = "DUMMY_MEAS_12345"
 
 /**
@@ -77,7 +76,7 @@ class SupplicantMeasurer(
                 }
                 SupplicantState.DISCONNECTED -> {
                     if (supplicantTransitions.any {
-                        it.state == "ASSOCIATED" || it.state == "FOUR_WAY_HANDSHAKE" || it.state == "GROUP_HANDSHAKE"
+                        it.state == "ASSOCIATING" || it.state == "ASSOCIATED" || it.state == "FOUR_WAY_HANDSHAKE" || it.state == "GROUP_HANDSHAKE"
                     }) {
                         brEarlyExitOccurred = true
                         cont.resume(Unit)
@@ -108,14 +107,13 @@ class SupplicantMeasurer(
         apList: List<AccessPoint>,
         onProgress: (Int, Int, String) -> Unit,
         onApStart: (AccessPoint) -> Unit = {},
-        onApFinished: (AccessPoint) -> Unit = {},
-        noActivityTimeoutMs: Long = NO_ACTIVITY_TIMEOUT_MS
+        onApFinished: (AccessPoint) -> Unit = {}
     ): List<AccessPoint> {
         val results = mutableListOf<AccessPoint>()
         for ((i, ap) in apList.withIndex()) {
             onProgress(i + 1, apList.size, ap.ssids.firstOrNull() ?: ap.bssid)
             onApStart(ap)
-            val result = measureForAp(ap, noActivityTimeoutMs)
+            val result = measureForAp(ap)
             results.add(result)
             onApFinished(result)
             delay(300)
@@ -125,7 +123,7 @@ class SupplicantMeasurer(
 
     // AP1件に対してSupplicant測定を行い結果を返す
     @Suppress("DEPRECATION")
-    private suspend fun measureForAp(ap: AccessPoint, noActivityTimeoutMs: Long = NO_ACTIVITY_TIMEOUT_MS): AccessPoint {
+    private suspend fun measureForAp(ap: AccessPoint): AccessPoint {
         val startMs = System.currentTimeMillis()
         measureStartMs = startMs
         supplicantTransitions.clear()
@@ -143,19 +141,11 @@ class SupplicantMeasurer(
             .build()
 
         var finalState = "NOT_FOUND"
-        var unavailableFired = false
 
         // 受け皿②：ConnectivityManagerからの接続成否通知を受け取るNetworkCallback
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 finalState = "NETWORK_AVAILABLE"
-                supplicantContinuation?.let { if (it.isActive) it.resume(Unit) }
-                supplicantContinuation = null
-                supplicantCallback = null
-                runCatching { connectivityManager.unregisterNetworkCallback(this) }
-            }
-            override fun onUnavailable() {
-                unavailableFired = true
                 supplicantContinuation?.let { if (it.isActive) it.resume(Unit) }
                 supplicantContinuation = null
                 supplicantCallback = null
@@ -175,7 +165,7 @@ class SupplicantMeasurer(
                     supplicantCallback = null
                     runCatching { connectivityManager.unregisterNetworkCallback(cb) }
                 }
-                connectivityManager.requestNetwork(request, cb, Handler(Looper.getMainLooper()), noActivityTimeoutMs.toInt())
+                connectivityManager.requestNetwork(request, cb, Handler(Looper.getMainLooper()))
             }
         }
 
@@ -196,10 +186,10 @@ class SupplicantMeasurer(
                     "PRE_OSTIMEOUT_$prevState"
                 }
             }
-            unavailableFired && transitions.isEmpty()  -> "OSTIMEOUT_NOSUPPLICANT"
-            unavailableFired && transitions.isNotEmpty() -> "OSTIMEOUT_${transitions.last().state}"
-            transitions.isEmpty() -> "COREBACKTIMEOUT_NOSUPPLICANT"
-            else -> "COREBACKTIMEOUT_${transitions.last().state}"
+            else -> {
+                val mostAdvanced = mostAdvancedState(transitions)
+                if (mostAdvanced != null) "TIMEOUT_$mostAdvanced" else "TIMEOUT_NULL"
+            }
         }
 
         return ap.copy(
@@ -207,6 +197,16 @@ class SupplicantMeasurer(
             supplicantFinalState = finalState,
             supplicantElapsedMs = elapsed
         )
+    }
+
+    private fun mostAdvancedState(transitions: List<SupplicantStateEntry>): String? {
+        if (transitions.isEmpty()) return null
+        val rank = mapOf(
+            "DISCONNECTED" to 0, "INACTIVE" to 1, "SCANNING" to 2,
+            "AUTHENTICATING" to 3, "ASSOCIATING" to 4, "ASSOCIATED" to 5,
+            "FOUR_WAY_HANDSHAKE" to 6, "GROUP_HANDSHAKE" to 7, "COMPLETED" to 8
+        )
+        return transitions.maxByOrNull { rank[it.state] ?: -1 }?.state
     }
 
     // BSSID・SSID・セキュリティ種別からWifiNetworkSpecifierを組み立てる
