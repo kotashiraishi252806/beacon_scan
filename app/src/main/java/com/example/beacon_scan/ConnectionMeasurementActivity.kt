@@ -76,6 +76,7 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
     private lateinit var btnEndSession: Button
     private lateinit var switchAutoScan: SwitchCompat
     private lateinit var switchSendMode: SwitchCompat
+    private lateinit var switchAssociatedEarlyExit: SwitchCompat
     private lateinit var etUrl: TextInputEditText
     private lateinit var tvEmpty: TextView
     private lateinit var tvAutoScanStatus: TextView
@@ -181,6 +182,7 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         btnEndSession = findViewById(R.id.btnEndSession)
         switchAutoScan = findViewById(R.id.switchAutoScan)
         switchSendMode = findViewById(R.id.switchSendMode)
+        switchAssociatedEarlyExit = findViewById(R.id.switchAssociatedEarlyExit)
         etUrl = findViewById(R.id.etUrl)
         tvEmpty = findViewById(R.id.tvEmpty)
         tvAutoScanStatus = findViewById(R.id.tvAutoScanStatus)
@@ -195,6 +197,12 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
                     .edit().putBoolean(KEY_SEND_MODE, isChecked).apply()
             }
             if (!isChecked) updatePendingCount()
+        }
+
+        switchAssociatedEarlyExit.isChecked = prefs2.getBoolean(KEY_ASSOCIATED_EARLY_EXIT, false)
+        switchAssociatedEarlyExit.setOnCheckedChangeListener { _, isChecked ->
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean(KEY_ASSOCIATED_EARLY_EXIT, isChecked).apply()
         }
 
         adapter = ApAdapter(apList) { count ->
@@ -651,7 +659,8 @@ WiFi接続プロセスの状態遷移を記録する機能。
                         apList.add(result)
                         adapter.notifyDataSetChanged()
                     }
-                }
+                },
+                earlyExitOnAssociated = switchAssociatedEarlyExit.isChecked
             )
 
             btnStopMeasurement.visibility = View.GONE
@@ -838,7 +847,8 @@ WiFi接続プロセスの状態遷移を記録する機能。
                     onProgress = { progress, total, name ->
                         val remaining = total - progress
                         tvSsidCount.text = "今回検出: ${total}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
-                    }
+                    },
+                    earlyExitOnAssociated = switchAssociatedEarlyExit.isChecked
                 )
 
                 btnStopMeasurement.visibility = View.GONE

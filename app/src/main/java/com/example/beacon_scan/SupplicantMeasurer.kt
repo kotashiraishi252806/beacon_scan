@@ -55,6 +55,12 @@ class SupplicantMeasurer(
     // OSタイムアウト前にBroadcastReceiverがcont.resume()を呼んだかどうかを示すフラグ
     @Volatile private var brEarlyExitOccurred = false
 
+    // ASSOCIATED受信時に即移行するモードが有効かどうか（measureAll()呼び出し前に設定）
+    @Volatile private var earlyExitOnAssociated = false
+
+    // ASSOCIATED受信による早期終了が発生したかどうか
+    @Volatile private var associatedEarlyExitOccurred = false
+
     // 受け皿①：wpa_supplicantからのSupplicant状態変化を受け取るBroadcastReceiver
     @Suppress("DEPRECATION")
     private val supplicantReceiver = object : BroadcastReceiver() {
@@ -73,6 +79,12 @@ class SupplicantMeasurer(
                 SupplicantState.COMPLETED -> {
                     brEarlyExitOccurred = true
                     cont.resume(Unit)
+                }
+                SupplicantState.ASSOCIATED -> {
+                    if (earlyExitOnAssociated) {
+                        associatedEarlyExitOccurred = true
+                        cont.resume(Unit)
+                    }
                 }
                 SupplicantState.DISCONNECTED -> {
                     if (supplicantTransitions.any {
@@ -107,8 +119,10 @@ class SupplicantMeasurer(
         apList: List<AccessPoint>,
         onProgress: (Int, Int, String) -> Unit,
         onApStart: (AccessPoint) -> Unit = {},
-        onApFinished: (AccessPoint) -> Unit = {}
+        onApFinished: (AccessPoint) -> Unit = {},
+        earlyExitOnAssociated: Boolean = false
     ): List<AccessPoint> {
+        this.earlyExitOnAssociated = earlyExitOnAssociated
         val results = mutableListOf<AccessPoint>()
         for ((i, ap) in apList.withIndex()) {
             onProgress(i + 1, apList.size, ap.ssids.firstOrNull() ?: ap.bssid)
@@ -118,6 +132,7 @@ class SupplicantMeasurer(
             onApFinished(result)
             delay(300)
         }
+        this.earlyExitOnAssociated = false
         return results
     }
 
@@ -129,6 +144,7 @@ class SupplicantMeasurer(
         supplicantTransitions.clear()
         supplicantContinuation = null
         brEarlyExitOccurred = false
+        associatedEarlyExitOccurred = false
 
         val specifier = buildSpecifier(ap) ?: return ap.copy(
             supplicantFinalState = "SKIPPED",
@@ -178,6 +194,7 @@ class SupplicantMeasurer(
 
         finalState = when {
             finalState == "NETWORK_AVAILABLE" -> "NETWORK_AVAILABLE"
+            associatedEarlyExitOccurred -> "PRE_TIMEOUT_ASSOCIATED"
             brEarlyExitOccurred -> {
                 if (transitions.isNotEmpty() && transitions.last().state == "COMPLETED") {
                     "AUTH_COMPLETED"

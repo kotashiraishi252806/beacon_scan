@@ -83,16 +83,6 @@ fun getSecurityGroup(capabilities: String): String = when {
     else                                                                   -> "その他"
 }
 
-fun groupBySsid(accessPoints: List<AccessPoint>): List<SsidGroup> {
-    val grouped = mutableMapOf<String, MutableList<AccessPoint>>()
-    for (ap in accessPoints) {
-        val key = ap.ssids.firstOrNull() ?: ""
-        grouped.getOrPut(key) { mutableListOf() }.add(ap)
-    }
-    return grouped.map { (ssid, aps) -> SsidGroup(ssid, aps) }
-        .sortedByDescending { group -> group.accessPoints.maxOf { it.rssiDbm } }
-}
-
 private val SECURITY_GROUP_ORDER = listOf("Open", "WPA-PSK", "WPA2-PSK", "WPA2-EAP", "WPA3-SAE", "その他")
 
 fun groupBySecurityGroup(accessPoints: List<AccessPoint>): List<SecurityGroup> {

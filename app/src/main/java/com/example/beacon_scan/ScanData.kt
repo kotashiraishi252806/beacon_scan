@@ -11,20 +11,17 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-const val DEFAULT_SERVER_URL = "http://192.168.11.119:8081/test_receive2.php"
-const val DEFAULT_SIMPLE_SERVER_URL = "http://192.168.11.119:8081/simple_receive.php"
-const val DEFAULT_SSID_SERVER_URL = "http://192.168.11.119:8081/test_receive2.php"
+const val DEFAULT_SERVER_URL = "http://192.168.11.119:8081/supplicant_data_receive.php"
+const val DEFAULT_SIMPLE_SERVER_URL = "http://192.168.11.119:8081/rssi_data_receive.php"
 const val PREFS_NAME = "beacon_scan_prefs"
 const val KEY_DEVICE_UUID = "device_uuid"
 const val KEY_SERVER_URL = "server_url"
 const val KEY_SIMPLE_SERVER_URL = "simple_server_url"
-const val KEY_SSID_SERVER_URL = "ssid_server_url"
 const val KEY_SEND_MODE = "send_mode"
 const val KEY_SIMPLE_SEND_MODE = "simple_send_mode"
-const val KEY_SSID_SEND_MODE = "ssid_send_mode"
+const val KEY_ASSOCIATED_EARLY_EXIT = "associated_early_exit"
 const val PENDING_FILE = "pending_scans.json"
 const val PENDING_SIMPLE_FILE = "pending_simple_scans.json"
-const val PENDING_SSID_FILE = "pending_ssid_scans.json"
 const val PENDING_SECURITY_FILE = "pending_security_scans.json"
 const val KEY_SECURITY_SERVER_URL = "security_server_url"
 const val KEY_SECURITY_SEND_MODE = "security_send_mode"
@@ -152,118 +149,10 @@ object ScanStore {
     }
 }
 
-data class SsidGroup(
-    val ssid: String,
-    val accessPoints: MutableList<AccessPoint>
-)
-
 data class SecurityGroup(
     val securityGroup: String,
     val accessPoints: MutableList<AccessPoint>
 )
-
-class SsidApAdapter(
-    private val items: MutableList<SsidGroup>,
-    private val onSelectionChanged: ((Int) -> Unit)? = null
-) : RecyclerView.Adapter<SsidApAdapter.ViewHolder>() {
-
-    var isMeasurementColoring = false
-    var measuringBssid: String? = null
-
-    var isSelectionMode = false
-        set(value) {
-            field = value
-            if (!value) selectedSsids.clear()
-            notifyDataSetChanged()
-        }
-
-    private val selectedSsids = mutableSetOf<String>()
-
-    fun getSelectedAps(): List<AccessPoint> =
-        items.filter { it.ssid in selectedSsids }.flatMap { it.accessPoints }
-
-    fun getSelectedSsids(): Set<String> = selectedSsids.toSet()
-
-    fun getSelectedCount(): Int = selectedSsids.size
-
-    fun areAllSelected(): Boolean = items.isNotEmpty() && items.all { it.ssid in selectedSsids }
-
-    fun selectAll() {
-        items.forEach { selectedSsids.add(it.ssid) }
-        notifyDataSetChanged()
-        onSelectionChanged?.invoke(selectedSsids.size)
-    }
-
-    fun clearSelection() {
-        selectedSsids.clear()
-        notifyDataSetChanged()
-        onSelectionChanged?.invoke(0)
-    }
-
-    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val tvSsid: TextView = view.findViewById(R.id.tvSsid)
-        val tvBssidInfo: TextView = view.findViewById(R.id.tvBssidInfo)
-        val tvSignal: TextView = view.findViewById(R.id.tvSignal)
-        val tvStandard: TextView = view.findViewById(R.id.tvStandard)
-        val tvSecurity: TextView = view.findViewById(R.id.tvSecurity)
-        val checkBoxSelect: CheckBox = view.findViewById(R.id.checkBoxSelect)
-        val viewMeasuredOverlay: View = view.findViewById(R.id.viewMeasuredOverlay)
-        val tvMeasurementStatus: TextView = view.findViewById(R.id.tvMeasurementStatus)
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_ssid_group, parent, false)
-        return ViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val group = items[position]
-        val aps = group.accessPoints
-
-        holder.tvSsid.text = if (group.ssid.isEmpty()) "（非公開）" else group.ssid
-
-        holder.tvBssidInfo.text = when {
-            aps.size == 1 -> aps[0].bssid
-            aps.size <= 3 -> "${aps.size}台: ${aps.joinToString(" / ") { it.bssid }}"
-            else -> "${aps.size}台: ${aps.take(3).joinToString(" / ") { it.bssid }} 他${aps.size - 3}台"
-        }
-
-        val bestAp = aps.maxByOrNull { it.rssiDbm } ?: aps[0]
-        holder.tvSignal.text = "${bestAp.rssiDbm} dBm  |  ${bestAp.band}  |  ${bestAp.channelWidthMhz}MHz幅"
-        holder.tvStandard.text = aps.map { it.wifiStandard }.distinct().joinToString(" / ")
-        holder.tvSecurity.text = aps.map { it.security }.distinct().joinToString(" / ")
-
-        val allMeasured = aps.all { it.supplicantFinalState != "NOT_MEASURED" }
-        val anyMeasuring = aps.any { it.bssid == measuringBssid }
-        val anyMeasured = aps.any { it.supplicantFinalState != "NOT_MEASURED" }
-
-        holder.viewMeasuredOverlay.visibility =
-            if (isMeasurementColoring && allMeasured) View.VISIBLE else View.GONE
-
-        holder.tvMeasurementStatus.text = when {
-            anyMeasuring -> "測定中"
-            allMeasured -> "測定済み"
-            anyMeasured -> "一部測定済み"
-            else -> "未測定"
-        }
-
-        if (isSelectionMode) {
-            holder.checkBoxSelect.visibility = View.VISIBLE
-            holder.checkBoxSelect.isChecked = group.ssid in selectedSsids
-            holder.itemView.setOnClickListener {
-                val nowChecked = group.ssid !in selectedSsids
-                if (nowChecked) selectedSsids.add(group.ssid) else selectedSsids.remove(group.ssid)
-                holder.checkBoxSelect.isChecked = nowChecked
-                onSelectionChanged?.invoke(selectedSsids.size)
-            }
-        } else {
-            holder.checkBoxSelect.visibility = View.GONE
-            holder.itemView.setOnClickListener(null)
-        }
-    }
-
-    override fun getItemCount() = items.size
-}
 
 class SecurityGroupAdapter(
     private val items: MutableList<SecurityGroup>,

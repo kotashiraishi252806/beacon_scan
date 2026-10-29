@@ -25,10 +25,6 @@ class DetailMenuActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
-        findViewById<Button>(R.id.btnSsidMeasurement).setOnClickListener {
-            startActivity(Intent(this, SsidMeasurementActivity::class.java))
-        }
-
         findViewById<Button>(R.id.btnConnectionMeasurement).setOnClickListener {
             startActivity(Intent(this, ConnectionMeasurementActivity::class.java))
         }

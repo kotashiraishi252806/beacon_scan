@@ -21,7 +21,7 @@
         android:text="詳細測定"
         android:textSize="24sp"
         android:textStyle="bold"
-        app:layout_constraintBottom_toTopOf="@id/btnSsidMeasurement"
+        app:layout_constraintBottom_toTopOf="@id/btnConnectionMeasurement"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/toolbar"
@@ -29,29 +29,16 @@
         app:layout_constraintVertical_bias="0.4" />
 
     <Button
-        android:id="@+id/btnSsidMeasurement"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="32dp"
-        android:layout_marginTop="48dp"
-        android:text="サプリカント状態取得（SSID）"
-        android:textSize="18sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle"
-        app:layout_constraintBottom_toTopOf="@id/btnConnectionMeasurement" />
-
-    <Button
         android:id="@+id/btnConnectionMeasurement"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="32dp"
-        android:layout_marginTop="16dp"
-        android:text="サプリカント状態取得（AP）"
+        android:layout_marginTop="48dp"
+        android:text="サプリカント状態取得"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnSsidMeasurement"
+        app:layout_constraintTop_toBottomOf="@id/tvTitle"
         app:layout_constraintBottom_toTopOf="@id/btnThroughputMeasurement" />
 
     <Button
