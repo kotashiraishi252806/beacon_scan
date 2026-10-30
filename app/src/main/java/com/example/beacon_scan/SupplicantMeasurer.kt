@@ -156,7 +156,7 @@ class SupplicantMeasurer(
             .setNetworkSpecifier(specifier)//接続先AP指定
             .build()
 
-        var finalState = "NOT_FOUND"
+        var finalState = "TIMEOUT_NULL"
 
         // 受け皿②：ConnectivityManagerからの接続成否通知を受け取るNetworkCallback
         val cb = object : ConnectivityManager.NetworkCallback() {

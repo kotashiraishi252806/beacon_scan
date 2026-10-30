@@ -1055,6 +1055,113 @@
   </div>
 </div>
 
+
+<!-- ══════════════════════════
+     S11 修正版フローチャート（因果順）
+══════════════════════════ -->
+<div class="slide" style="overflow:auto; padding:30px 40px 20px; display:block;">
+  <div class="label">修正版フローチャート（因果順）</div>
+  <h2>finalstate 付与条件フロー（因果順・コード準拠）</h2>
+  <p style="font-size:12px; color:#667; margin-bottom:8px;">SupplicantMeasurer.kt measureForAp() の finalState 決定フロー。原因→結果の順に記述。ひし形が判定条件、四角が付与される finalState。</p>
+  <hr class="rule">
+
+  <div style="overflow-x:auto;">
+  <svg viewBox="0 0 950 790" width="1425" height="1185" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="p11-arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L0,8 L8,4 z" fill="#888"/>
+      </marker>
+    </defs>
+
+    <!-- START -->
+    <rect x="300" y="8" width="140" height="34" rx="5" fill="#0d1f45"/>
+    <text x="370" y="30" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="13" fill="white" font-weight="700">接続試行 開始</text>
+    <line x1="370" y1="42" x2="370" y2="58" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+
+    <!-- D1: buildSpecifier() == null? center(370,86) hh=28 -->
+    <polygon points="235,86 370,58 505,86 370,114" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="81" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">buildSpecifier()</text>
+    <text x="370" y="96" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">== null ?</text>
+    <line x1="505" y1="86" x2="566" y2="86" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="533" y="80" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="571" y="69" width="100" height="34" rx="5" fill="#f2f3f6" stroke="#889" stroke-width="1.5"/>
+    <text x="621" y="90" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="12" fill="#334">SKIPPED</text>
+    <line x1="370" y1="114" x2="370" y2="152" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="380" y="136" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+
+    <!-- D2: onAvailable()が発火したか? center(370,180) hh=28 -->
+    <polygon points="235,180 370,152 505,180 370,208" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="175" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">onAvailable() が</text>
+    <text x="370" y="190" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">発火したか？</text>
+    <line x1="505" y1="180" x2="566" y2="180" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="533" y="174" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="571" y="163" width="200" height="34" rx="5" fill="#eef7f0" stroke="#237038" stroke-width="1.5"/>
+    <text x="671" y="184" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="12" fill="#1a3020">NETWORK_AVAILABLE</text>
+    <line x1="370" y1="208" x2="370" y2="246" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="380" y="230" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+
+    <!-- D3: ASSOCIATEDを受信しearlyExitOnAssociated==true? center(370,294) hh=48 -->
+    <polygon points="235,294 370,246 505,294 370,342" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="279" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#1a2040">ASSOCIATED を受信し</text>
+    <text x="370" y="293" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#1a2040">earlyExitOnAssociated</text>
+    <text x="370" y="307" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#1a2040">== true だったか？</text>
+    <line x1="505" y1="294" x2="566" y2="294" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="533" y="288" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="571" y="277" width="230" height="34" rx="5" fill="#eef4ff" stroke="#1d57b0" stroke-width="1.5"/>
+    <text x="686" y="298" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">PRE_TIMEOUT_ASSOCIATED</text>
+    <line x1="370" y1="342" x2="370" y2="380" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="380" y="364" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+
+    <!-- D4: COMPLETEDを受信したか? center(370,408) hh=28 -->
+    <polygon points="235,408 370,380 505,408 370,436" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="403" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">COMPLETED を</text>
+    <text x="370" y="418" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">受信したか？</text>
+    <line x1="505" y1="408" x2="566" y2="408" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="533" y="402" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="571" y="391" width="165" height="34" rx="5" fill="#eef4ff" stroke="#1d57b0" stroke-width="1.5"/>
+    <text x="654" y="412" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="12" fill="#1a2040">AUTH_COMPLETED</text>
+    <line x1="370" y1="436" x2="370" y2="474" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="380" y="458" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+
+    <!-- D5: ASSOCIATING等を経てDISCONNECTEDを受信したか? center(370,534) hh=60 -->
+    <polygon points="235,534 370,474 505,534 370,594" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="512" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="9" fill="#1a2040">ASSOCIATING / ASSOCIATED /</text>
+    <text x="370" y="525" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="9" fill="#1a2040">FOUR_WAY_HANDSHAKE /</text>
+    <text x="370" y="538" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="9" fill="#1a2040">GROUP_HANDSHAKE のいずれかを</text>
+    <text x="370" y="551" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="9" fill="#1a2040">受信した後に</text>
+    <text x="370" y="564" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="9" fill="#1a2040">DISCONNECTED を受信したか？</text>
+    <line x1="505" y1="534" x2="566" y2="534" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="533" y="528" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="571" y="515" width="260" height="38" rx="5" fill="#fdf3ea" stroke="#b86020" stroke-width="1.5"/>
+    <text x="701" y="530" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">PRE_TIMEOUT_</text>
+    <text x="701" y="546" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">&lt;直前認証状態&gt; ※1</text>
+    <line x1="370" y1="594" x2="370" y2="652" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="380" y="615" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+    <text x="380" y="630" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="9" fill="#aab">（10sタイムアウト後）</text>
+
+    <!-- D6: 状態記録が1件以上あるか? center(370,680) hh=28 -->
+    <polygon points="235,680 370,652 505,680 370,708" fill="white" stroke="#1d57b0" stroke-width="2"/>
+    <text x="370" y="675" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">状態記録が</text>
+    <text x="370" y="690" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#1a2040">1件以上あるか？</text>
+    <line x1="505" y1="680" x2="566" y2="680" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="533" y="674" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#237038" font-weight="700">はい</text>
+    <rect x="571" y="658" width="310" height="44" rx="5" fill="#fdf3ea" stroke="#b86020" stroke-width="1.5"/>
+    <text x="726" y="675" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">TIMEOUT_</text>
+    <text x="726" y="691" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="11" fill="#3a1a00">&lt;最も認証進捗が高い状態&gt; ※2</text>
+    <line x1="370" y1="708" x2="370" y2="738" stroke="#888" stroke-width="1.5" marker-end="url(#p11-arr)"/>
+    <text x="380" y="726" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="10" fill="#b03030" font-weight="700">いいえ</text>
+    <rect x="255" y="742" width="230" height="34" rx="5" fill="#f2f3f6" stroke="#889" stroke-width="1.5"/>
+    <text x="370" y="763" text-anchor="middle" font-family="Hiragino Sans,Meiryo,sans-serif" font-size="12" fill="#334">TIMEOUT_NULL</text>
+
+  </svg>
+  </div>
+
+  <div style="margin-top:14px; font-size:12px; color:#334; line-height:2.0;">
+    <div>※1 &lt;直前認証状態&gt;：<code>transitions[size-2].state</code>（size &lt; 2 の場合は <code>transitions.last().state</code>）</div>
+    <div>※2 &lt;最も認証進捗が高い状態&gt;：<code>mostAdvancedState()</code> の戻り値。ランク：DISCONNECTED(0) &lt; INACTIVE(1) &lt; SCANNING(2) &lt; AUTHENTICATING(3) &lt; ASSOCIATING(4) &lt; ASSOCIATED(5) &lt; FOUR_WAY_HANDSHAKE(6) &lt; GROUP_HANDSHAKE(7) &lt; COMPLETED(8)</div>
+  </div>
+</div>
+
 </div><!-- #deck -->
 
 <div id="nav">
