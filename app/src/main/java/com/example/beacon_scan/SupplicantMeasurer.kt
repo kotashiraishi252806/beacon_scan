@@ -18,12 +18,15 @@ import android.net.wifi.SupplicantState
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 private const val DIALOG_TIMEOUT_MS = 10_000L
+private const val FIRST_STATE_TIMEOUT_MS = 3_000L // 試行開始から最初の状態を待つ時間
+private const val NEXT_STATE_TIMEOUT_MS = 3_338L  // 状態受信後に次の状態を待つ時間
 private const val DUMMY_PASSPHRASE = "DUMMY_MEAS_12345"
 
 /**
@@ -61,6 +64,22 @@ class SupplicantMeasurer(
     // ASSOCIATED受信による早期終了が発生したかどうか
     @Volatile private var associatedEarlyExitOccurred = false
 
+    // 状態無変化タイマー（3000ms / 3338ms）による打ち切りが発生したかどうか
+    @Volatile private var idleExitOccurred = false
+
+    // 接続要求APIの呼び出しが例外で失敗したかどうか
+    @Volatile private var requestFailed = false
+
+    // 状態無変化タイマー（BroadcastReceiverと同じメインスレッドで動かす）
+    private val idleHandler = Handler(Looper.getMainLooper())
+    private val idleTimeoutRunnable = Runnable {
+        val cont = supplicantContinuation ?: return@Runnable
+        if (cont.isActive) {
+            idleExitOccurred = true
+            cont.resume(Unit)
+        }
+    }
+
     // 受け皿①：wpa_supplicantからのSupplicant状態変化を受け取るBroadcastReceiver
     @Suppress("DEPRECATION")
     private val supplicantReceiver = object : BroadcastReceiver() {
@@ -75,6 +94,9 @@ class SupplicantMeasurer(
             supplicantTransitions.add(SupplicantStateEntry(state.name, System.currentTimeMillis() - measureStartMs))
             val cont = supplicantContinuation ?: return
             if (!cont.isActive) return
+            // 状態を受信するたびに無変化タイマーを3338msにリセット
+            idleHandler.removeCallbacks(idleTimeoutRunnable)
+            idleHandler.postDelayed(idleTimeoutRunnable, NEXT_STATE_TIMEOUT_MS)
             when (state) {
                 SupplicantState.COMPLETED -> {
                     brEarlyExitOccurred = true
@@ -145,6 +167,9 @@ class SupplicantMeasurer(
         supplicantContinuation = null
         brEarlyExitOccurred = false
         associatedEarlyExitOccurred = false
+        idleExitOccurred = false
+        requestFailed = false
+        val apiCalls = mutableListOf<SupplicantApiCall>()
 
         val specifier = buildSpecifier(ap) ?: return ap.copy(
             supplicantFinalState = "SKIPPED",
@@ -170,7 +195,7 @@ class SupplicantMeasurer(
         }
 
         // 単一待機：最大10秒
-        // onAvailable / onUnavailable / terminal state のいずれかで早期終了
+        // onAvailable / onUnavailable / terminal state / 状態無変化タイマー のいずれかで早期終了
         // continuation設定後にrequestNetworkを呼ぶことでonUnavailableとのレース条件を回避
         withTimeoutOrNull(DIALOG_TIMEOUT_MS) {
             suspendCancellableCoroutine<Unit> { cont ->
@@ -181,10 +206,24 @@ class SupplicantMeasurer(
                     supplicantCallback = null
                     runCatching { connectivityManager.unregisterNetworkCallback(cb) }
                 }
-                connectivityManager.requestNetwork(request, cb, Handler(Looper.getMainLooper()))
+                // 最初の状態を待つタイマー（3000ms）を開始
+                idleHandler.postDelayed(idleTimeoutRunnable, FIRST_STATE_TIMEOUT_MS)
+                val callMs = System.currentTimeMillis() - startMs
+                val callResult = runCatching {
+                    connectivityManager.requestNetwork(request, cb, Handler(Looper.getMainLooper()))
+                }
+                val resultStr = callResult.exceptionOrNull()?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "OK"
+                apiCalls.add(SupplicantApiCall("ConnectivityManager.requestNetwork", callMs, resultStr))
+                Log.d("BeaconScan", "requestNetwork ${ap.bssid} at ${callMs}ms -> $resultStr")
+                if (callResult.isFailure) {
+                    requestFailed = true
+                    cont.resume(Unit)
+                }
             }
         }
 
+        // 無変化タイマーを停止
+        idleHandler.removeCallbacks(idleTimeoutRunnable)
         supplicantContinuation = null
         supplicantCallback = null
         runCatching { connectivityManager.unregisterNetworkCallback(cb) }
@@ -193,6 +232,7 @@ class SupplicantMeasurer(
         val transitions = supplicantTransitions.toList()
 
         finalState = when {
+            requestFailed -> "REQUEST_FAILED"
             finalState == "NETWORK_AVAILABLE" -> "NETWORK_AVAILABLE"
             associatedEarlyExitOccurred -> "PRE_TIMEOUT_ASSOCIATED"
             brEarlyExitOccurred -> {
@@ -203,6 +243,10 @@ class SupplicantMeasurer(
                     "PRE_TIMEOUT_$prevState"
                 }
             }
+            idleExitOccurred -> {
+                val mostAdvanced = mostAdvancedState(transitions)
+                if (mostAdvanced != null) "IDLE_$mostAdvanced" else "IDLE_NULL"
+            }
             else -> {
                 val mostAdvanced = mostAdvancedState(transitions)
                 if (mostAdvanced != null) "TIMEOUT_$mostAdvanced" else "TIMEOUT_NULL"
@@ -212,7 +256,8 @@ class SupplicantMeasurer(
         return ap.copy(
             supplicantStates = transitions,
             supplicantFinalState = finalState,
-            supplicantElapsedMs = elapsed
+            supplicantElapsedMs = elapsed,
+            supplicantApiCalls = apiCalls
         )
     }
 

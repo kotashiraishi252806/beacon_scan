@@ -30,6 +30,9 @@ const val AUTO_SCAN_INTERVAL_MS = 5_000L
 
 data class SupplicantStateEntry(val state: String, val elapsedMs: Long)
 
+// 接続要求APIの呼び出し記録（elapsedMsは試行開始からの経過ms、resultは"OK"または例外名）
+data class SupplicantApiCall(val api: String, val elapsedMs: Long, val result: String)
+
 data class AccessPoint(
     val bssid: String,
     val mldMacAddress: String?,
@@ -46,7 +49,8 @@ data class AccessPoint(
     val securityTypesRaw: List<Int> = emptyList(),
     val supplicantStates: List<SupplicantStateEntry> = emptyList(),
     val supplicantFinalState: String = "NOT_MEASURED",
-    val supplicantElapsedMs: Long = -1L
+    val supplicantElapsedMs: Long = -1L,
+    val supplicantApiCalls: List<SupplicantApiCall> = emptyList()
 )
 
 // org.json の toString() は / を \/ にエスケープするため、ファイル書き込みと送信前に戻す

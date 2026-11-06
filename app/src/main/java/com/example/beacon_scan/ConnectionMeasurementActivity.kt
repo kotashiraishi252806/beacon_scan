@@ -880,9 +880,9 @@ WiFi接続プロセスの状態遷移を記録する機能。
                 }
             }
         } else {
-            // セッション2回目以降：前回選択BSSIDで自動測定
+            // セッション2回目以降：今回検出した全BSSIDで自動測定
             if (sessionId != null && selectedBssids.isNotEmpty()) {
-                val targetAps = apList.filter { it.bssid in selectedBssids }
+                val targetAps = apList.toList()
                 isScanInProgress = false
                 isProcessingResults = false
                 if (targetAps.isNotEmpty()) {
@@ -955,6 +955,15 @@ WiFi接続プロセスの状態遷移を記録する機能。
                 })
                 put("supplicant_final_state", ap.supplicantFinalState)
                 put("supplicant_elapsed_ms", ap.supplicantElapsedMs)
+                put("supplicant_api_calls", JSONArray().also { arr ->
+                    ap.supplicantApiCalls.forEach { call ->
+                        arr.put(JSONObject().apply {
+                            put("api", call.api)
+                            put("elapsed_ms", call.elapsedMs)
+                            put("result", call.result)
+                        })
+                    }
+                })
             })
         }
         val entry = JSONObject().apply {
