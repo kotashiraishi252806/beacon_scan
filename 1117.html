@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>修士論文 3.2節・5章 原稿 (2026-11-17)</title>
+<style>
+body { font-family: "Hiragino Sans", "Meiryo", "Yu Gothic", sans-serif; line-height: 1.9; max-width: 960px; margin: 2em auto; padding: 0 1.2em; color: #222; }
+h1, h2, h3, h4 { padding-bottom: 0.3em; }
+h1 { font-size: 1.6em; border-bottom: 2px solid #444; }
+h2 { font-size: 1.4em; border-bottom: 1px solid #888; margin-top: 2em; }
+h3 { font-size: 1.2em; border-bottom: 1px dotted #aaa; margin-top: 1.5em; }
+h4 { font-size: 1.05em; border-bottom: none; margin-top: 1.2em; }
+p { margin: 0.8em 0; }
+.draft { background-color: #fff9c4; padding: 2px 4px; }
+.added { background-color: #e3f2fd; padding: 2px 4px; }
+.evidence { font-size: 0.78em; color: #666; margin-left: 0.2em; }
+.guess { color: #c62828; font-weight: bold; font-size: 0.78em; margin-left: 0.2em; }
+table { border-collapse: collapse; margin: 1em 0; width: 100%; font-size: 0.95em; }
+th, td { border: 1px solid #999; padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background-color: #f0f0f0; }
+pre { background-color: #f6f6f6; padding: 10px; border: 1px solid #ccc; border-radius: 4px; overflow-x: auto; font-size: 0.82em; line-height: 1.4; }
+figcaption { font-weight: bold; margin: 0.6em 0 0.3em 0; }
+.legend { font-size: 0.9em; background-color: #fafafa; border: 1px solid #ccc; padding: 10px 14px; margin: 1em 0; border-radius: 4px; }
+.legend span { padding: 2px 6px; margin: 0 4px; }
+ol, ul { margin: 0.5em 0 0.8em 0; }
+li { margin: 0.3em 0; }
+</style>
+</head>
+<body>
+<h1>修士論文 3.2節・5章 原稿（2026-11-17）</h1>
+
+<div class="legend">
+  <strong>凡例:</strong>
+  <span class="draft">草稿の文</span>
+  <span class="added">AI補完</span>
+  <span class="evidence">[確認済: ファイル名:行番号] は本文より小さい文字で表示</span>
+  <span class="guess">[推測]</span> は赤字
+</div>
+
+<h2>3.2 測定アプリケーション</h2>
+
+<p>
+<span class="draft">本節では、測定アプリケーションの構成について述べる。</span>
+<span class="draft">本アプリケーションは測定部、データ構成部、データ送信部の3つから構成される。</span>
+<span class="draft">測定部は無線LAN環境の測定値を取得する。</span>
+<span class="draft">データ構成部は、その測定値を送信用のデータに構成する。</span>
+<span class="draft">データ送信部は、構成したデータをサーバへ送信する。</span>
+<span class="added">測定機能はそれぞれ独立した画面として実装されており、起動時のメインメニューから選択して起動する。</span><span class="evidence">[確認済: app/src/main/AndroidManifest.xml:30-57]</span>
+<span class="added">各画面および各部の具体的な実装は 5 章で述べる。</span>
+</p>
+
+<h3>3.2.1 測定部</h3>
+
+<p>
+<span class="draft">測定部はビーコン受信によるAP情報収集機能（APスキャン機能）、検出したAPへの接続試行によるサプリカント状態取得機能（パケット交換状態取得機能）、サーバからのファイルダウンロードによるスループット測定機能（スループット測定機能）の3つの機能から構成される。</span>
+<span class="added">3 つの機能は、それぞれ独立した画面として実装されている。</span><span class="evidence">[確認済: AndroidManifest.xml:44-56]</span>
+</p>
+
+<p>
+<span class="draft">「APスキャン機能」は、物理層の指標であるRSSIと、ビーコンから取得できるAP情報を取得する。</span>
+<span class="draft">測定の対象は測定端末が検出した全APである。</span>
+<span class="added">APスキャン機能で AP の電波から直接取得する指標を表 a-1 に示す。これら以外にも、サーバ送信時には導出指標やメタデータ（スキャン識別子、スキャン時刻、端末属性、位置情報など）が付与される。これらの定義は 5.1.2 で述べる。</span>
+</p>
+
+<figcaption>表 a-1: ビーコンスキャン機能で AP の電波から直接取得する指標</figcaption>
+<table>
+<thead><tr><th>指標名</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>BSSID</td><td>AP が持つ 1 つの無線インタフェース（1 BSS）を識別する MAC アドレス形式の識別子。1 台の AP は複数の BSSID を持ち得る。<span class="evidence">[確認済: WifiUtils.kt:103-125、実測により確認]</span></td></tr>
+<tr><td>SSID</td><td>当該 BSSID のビーコンまたはプローブ応答に含まれる SSID 文字列。非公開 AP の場合は空とする。<span class="evidence">[確認済: WifiUtils.kt:107]</span></td></tr>
+<tr><td>RSSI</td><td>当該 BSSID から受信した電波の受信信号強度（dBm 単位）。<span class="evidence">[確認済: WifiUtils.kt:129]</span></td></tr>
+<tr><td>中心周波数</td><td>当該 BSSID が運用するチャネルの中心周波数（MHz 単位）。<span class="evidence">[確認済: WifiUtils.kt:130]</span></td></tr>
+<tr><td>準拠 IEEE 802.11 規格（世代コード）</td><td>当該 BSSID が準拠する IEEE 802.11 規格世代を表す、Android プラットフォームが定義する整数コード。<span class="evidence">[確認済: WifiUtils.kt:108]</span></td></tr>
+<tr><td>暗号・認証方式の記述文字列</td><td>当該 BSSID のビーコンまたはプローブ応答に含まれる暗号・認証方式情報を、Android プラットフォームが独自形式に整形した文字列。例: <code>[WPA2-PSK-CCMP][RSN-PSK+SAE-CCMP][ESS]</code>。<span class="evidence">[確認済: WifiUtils.kt:136]</span></td></tr>
+<tr><td>MLD MAC アドレス</td><td>Wi-Fi 7（IEEE 802.11be）の MLO（Multi-Link Operation）機能において、物理 AP（MLD: Multi-Link Device）を識別する MAC アドレス形式の識別子。MLO 非対応 AP、または Android API レベル 33 未満の端末では空とする。<span class="evidence">[確認済: WifiUtils.kt:118-120]</span></td></tr>
+</tbody>
+</table>
+
+<p>
+<span class="draft">「パケット交換状態取得機能」は、データリンク層の指標としてサプリカント状態を取得する。</span>
+<span class="draft">測定の対象は検出した全APである。</span>
+<span class="added">本機能は検出された各 AP に順次接続要求を発行し、Wi-Fi の接続処理中に生じる状態遷移を記録する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:85-122, 179-223]</span>
+<span class="added">測定対象は、手動スキャン時は検出された AP 一覧から測定者が選択した AP、自動スキャン時は検出された全 AP である。</span><span class="evidence">[確認済: ConnectionMeasurementActivity.kt:282-307, 843-852, 904-928]</span>
+<span class="added">パケット交換状態取得機能で取得する指標を表 a-2 に示す。</span>
+</p>
+
+<figcaption>表 a-2: サプリカント状態取得機能で取得する指標</figcaption>
+<table>
+<thead><tr><th>指標名</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>サプリカント状態遷移</td><td>1 回の接続試行中に観測された Wi-Fi 接続処理の状態の列。各状態について、観測された時刻（測定開始からの経過時間）も合わせて保持する。<span class="evidence">[確認済: SupplicantMeasurer.kt:94、ConnectionMeasurementActivity.kt:948-955]</span></td></tr>
+<tr><td>最終状態</td><td>測定終了時点の到達状況を分類したラベル。接続完了、途中終了、タイムアウト、スキップ等を区別する。<span class="evidence">[確認済: SupplicantMeasurer.kt:174-253]</span></td></tr>
+<tr><td>測定所要時間</td><td>1 件の AP に対する測定開始から終了までの経過時間。<span class="evidence">[確認済: SupplicantMeasurer.kt:164, 231, 259]</span></td></tr>
+</tbody>
+</table>
+
+<p>
+<span class="draft">「スループット測定機能」はアプリケーション層の指標としてスループットを測定する。</span>
+<span class="draft">測定対象は接続中のAP1台である。</span>
+<span class="added">本機能は、端末が現在接続している AP を経由してあらかじめ指定されたサーバからファイルをダウンロードし、所要時間と転送バイト数からスループットを算出する。</span><span class="evidence">[確認済: ThroughputActivity.kt:270-323]</span>
+<span class="added">測定指標一覧を表 a-3 に示す。</span>
+</p>
+
+<figcaption>表 a-3: スループット測定機能で取得する指標</figcaption>
+<table>
+<thead><tr><th>指標名</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>緯度</td><td>測定地点の緯度。<span class="evidence">[確認済: ThroughputActivity.kt:203-234, 331]</span></td></tr>
+<tr><td>経度</td><td>測定地点の経度。<span class="evidence">[確認済: ThroughputActivity.kt:203-234, 332]</span></td></tr>
+<tr><td>接続中 AP の SSID</td><td>測定時点で端末が接続している AP の SSID。<span class="evidence">[確認済: ThroughputActivity.kt:237-268, 333]</span></td></tr>
+<tr><td>接続中 AP の RSSI</td><td>接続中 AP に対する電波強度（dBm 単位）。<span class="evidence">[確認済: ThroughputActivity.kt:263, 334]</span></td></tr>
+<tr><td>接続中 AP の Wi-Fi 規格</td><td>接続中 AP の対応 Wi-Fi 規格の世代ラベル。<span class="evidence">[確認済: ThroughputActivity.kt:243-259, 335]</span></td></tr>
+<tr><td>ダウンロードファイルサイズ</td><td>ダウンロードしたファイルの総サイズ（MB 単位）。<span class="evidence">[確認済: ThroughputActivity.kt:299, 314, 336]</span></td></tr>
+<tr><td>ダウンロード所要時間</td><td>ダウンロード開始から終了（またはタイムアウト）までの経過時間（秒単位）。<span class="evidence">[確認済: ThroughputActivity.kt:297, 312, 337]</span></td></tr>
+<tr><td>スループット</td><td>ダウンロードバイト数と所要時間から算出した通信速度（Mbps 単位）。<span class="evidence">[確認済: ThroughputActivity.kt:298, 313, 338]</span></td></tr>
+</tbody>
+</table>
+
+<p>
+<span class="draft">いずれの測定機能も、測定者が任意のタイミングで測定を開始し、測定値を取得する。</span>
+<span class="draft">測定部は、取得した測定値に位置情報と時刻を対応付け、データ構成部へ渡す。</span>
+<span class="added">ただし、スループット測定機能は時刻を測定値として JSON に格納しない。ダウンロード所要時間（measure_time）のみを格納する。</span><span class="evidence">[確認済: ThroughputActivity.kt:49-58, 330-340]</span>
+<span class="draft">各測定機能の実現方法は、5.節で述べる。</span>
+</p>
+
+<h3>3.2.2 データ構成部</h3>
+
+<p>
+<span class="draft">データ構成部は、測定部から受け取った測定値を、サーバへ送信する形式に構成する役割を担う。</span>
+<span class="draft">データはJSON形式で構成する。</span>
+<span class="draft">その構造を図3に示す。</span>
+<span class="draft">構成したデータは、データ送信部へ渡す。</span>
+<span class="added">JSON の構造は測定機能ごとに異なる。図 3(a) にビーコンスキャン機能単独の送信 JSON、図 3(b) にサプリカント状態取得機能を加えた送信 JSON、図 3(c) にスループット測定機能の送信 JSON を示す。</span>
+</p>
+
+<figcaption>図 3(a): ビーコンスキャン機能（単独）の送信 JSON 構造</figcaption>
+<pre>[
+  {
+    "scan_id":      &lt;スキャン識別子&gt;,
+    "device_id":    &lt;端末識別子&gt;,
+    "device": {
+      "manufacturer": &lt;製造者名&gt;,
+      "model":        &lt;モデル名&gt;,
+      "android_api":  &lt;API レベル&gt;
+    },
+    "scanned_at":   &lt;スキャン時刻&gt;,
+    "label":        &lt;ラベル文字列または空文字&gt;,
+    "location": {
+      "latitude":    &lt;緯度&gt;,
+      "longitude":   &lt;経度&gt;,
+      "accuracy_m":  &lt;推定精度&gt;
+    } | null,
+    "access_points": [
+      {
+        "bssid":              &lt;BSSID&gt;,
+        "mld_mac_address":    &lt;MLD MAC アドレス&gt; | null,
+        "oui":                &lt;OUI&gt;,
+        "ssids":              [&lt;SSID&gt;, ...],
+        "rssi_dbm":           &lt;RSSI&gt;,
+        "frequency_mhz":      &lt;周波数&gt;,
+        "band":               &lt;帯域&gt;,
+        "channel_width_mhz":  &lt;チャネル幅&gt;,
+        "wifi_standard":      &lt;Wi-Fi 規格ラベル&gt;,
+        "wifi_standard_code": &lt;Wi-Fi 規格コード&gt;,
+        "security":           &lt;セキュリティ分類&gt;,
+        "capabilities_raw":   &lt;セキュリティ情報生文字列&gt;
+      }, ...
+    ]
+  }
+]</pre>
+<p><span class="evidence">[確認済: SimpleMeasurementActivity.kt:429-470]</span></p>
+
+<figcaption>図 3(b): サプリカント状態取得機能を含む送信 JSON 構造（図 3(a) の access_points の各要素に以下を追加）</figcaption>
+<pre>{
+  "supplicant_states": [
+    { "state": &lt;サプリカント状態名&gt;, "elapsed_ms": &lt;経過時間&gt; }, ...
+  ],
+  "supplicant_final_state": &lt;最終状態ラベル&gt;,
+  "supplicant_elapsed_ms":  &lt;測定所要時間&gt;,
+  "supplicant_api_calls": [
+    { "api": &lt;接続要求 API 名&gt;, "elapsed_ms": &lt;経過時間&gt;, "result": &lt;成否&gt; }, ...
+  ]
+}</pre>
+<p><span class="evidence">[確認済: ConnectionMeasurementActivity.kt:931-991]</span></p>
+
+<figcaption>図 3(c): スループット測定機能の送信 JSON 構造</figcaption>
+<pre>{
+  "latitude":         &lt;緯度&gt;,
+  "longitude":        &lt;経度&gt;,
+  "ssid":             &lt;接続中 AP の SSID&gt;,
+  "rssi":             &lt;接続中 AP の RSSI&gt;,
+  "wifistandard":     &lt;接続中 AP の Wi-Fi 規格ラベル&gt;,
+  "downloadfilesize": &lt;ダウンロードファイルサイズ&gt;,
+  "measure_time":     &lt;ダウンロード所要時間&gt;,
+  "throughput":       &lt;スループット&gt;
+}</pre>
+<p><span class="evidence">[確認済: ThroughputActivity.kt:49-58, 325-341]</span></p>
+
+<h3>3.2.3 データ送信部</h3>
+
+<p>
+<span class="draft">データ送信部は、データ構成部が構成したデータをサーバへ送信する役割を担う。</span>
+<span class="draft">送信にはHTTPを用い、</span><span class="added">送信タイミングは機能により異なる。ビーコンスキャン機能およびサプリカント状態取得機能は、「測定ごと」と「一定件数ごと（端末内に一度保留してからまとめて送信）」の 2 つのモードを備え、測定画面のスイッチで切り替える。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:160-167, 415-417, 195-204、ConnectionMeasurementActivity.kt:193-200, 677-678]</span>
+<span class="added">スループット測定機能は、測定ごとに 1 回送信する。</span><span class="evidence">[確認済: ThroughputActivity.kt:161-192]</span>
+<span class="draft">送信に失敗した場合は、</span><span class="added">ビーコンスキャン機能およびサプリカント状態取得機能では、送信対象のデータを端末内に保持したまま、次回の送信機会に再送を試みる。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:538-544、ConnectionMeasurementActivity.kt:1023-1029]</span>
+<span class="added">スループット測定機能では失敗時に端末内へ保持せず、画面上に失敗を通知するのみとする。</span><span class="evidence">[確認済: ThroughputActivity.kt:359-369]</span>
+<span class="added">また、送信先サーバの URL は 3 つの測定機能それぞれで独立に設定でき、測定画面上で変更できる。</span><span class="evidence">[確認済: ScanData.kt:14-28、SimpleMeasurementActivity.kt:169, 304-316、ConnectionMeasurementActivity.kt:251, 540-552、ThroughputActivity.kt:124-159]</span>
+<span class="draft">送信したデータは、3.3節で述べるサーバ側で受信され、データベースに記録される。</span><span class="added">サーバ側の受信処理およびデータベースへの記録処理は本プロジェクトのソースコードには含まれないため、詳細は不明。</span>
+</p>
+
+<h2>5章 機能</h2>
+
+<h3>5.1 ビーコンスキャン機能</h3>
+
+<h4>5.1.1 概要</h4>
+
+<p>
+<span class="added">ビーコンスキャン機能は、端末周辺の AP が発するビーコンから物理層・リンク層の情報を取得する機能である。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:331-427、WifiUtils.kt:100-140]</span>
+<span class="added">取得する指標は 3.2.1 の表 a-1 に示したとおりで、BSSID、SSID、RSSI、周波数、帯域、チャネル幅、Wi-Fi 規格、セキュリティ分類、capabilities 生文字列、および各スキャンのメタデータ（スキャン ID、端末 ID、端末情報、スキャン時刻、ラベル、位置情報）を含む。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:429-470]</span>
+<span class="added">測定の対象は、1 回のスキャンで端末が検出したすべての AP である。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:377-382]</span>
+<span class="added">取得した測定値は、位置情報および時刻と対応付けられ、データ構成部が JSON オブジェクトへ変換して端末内の JSON ファイル（単独使用時は pending_simple_scans.json、サプリカント状態取得機能と併用する場合は pending_scans.json）へ追記し、データ送信部へ渡す。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:410, 429-470、ScanData.kt:23-24, 69-80、ConnectionMeasurementActivity.kt:931-991]</span>
+</p>
+
+<h4>5.1.2 取得・付与する指標の定義</h4>
+
+<p><span class="added">5.1.1 で述べたとおり、ビーコンスキャン機能は AP の電波から物理層およびリンク層の情報を取得する（表 a-1）。しかし、直接取得した指標のみでは、研究目的に必要な以下の分析を行うことが難しい。そこで本機能は、直接取得した指標から導出した指標、および測定記録に付与するメタデータを合わせてサーバへ送信する。</span></p>
+
+<ul>
+<li><span class="added">分析粒度: 中心周波数の数値そのままでは 2.4/5/6GHz の帯域別集計が困難である。また、準拠 IEEE 802.11 規格を表すコード値や、Android プラットフォームが整形した暗号・認証方式の記述文字列そのままでは、研究で扱う分類単位（規格世代、セキュリティ方式）に基づく集計が困難である。</span><span class="evidence">[推測: 研究データ用途を前提とした場合の必要性]</span></li>
+<li><span class="added">測定記録の識別・紐付け: 複数のスキャン、複数の端末、複数の測定場所から得られた記録を区別・紐付けるため、記録単位で一意の識別子、測定時刻、セッション単位のラベルが必要である。</span><span class="evidence">[推測: サーバ側での記録管理を前提とした必要性]</span></li>
+<li><span class="added">測定端末による差: 本研究は多数の一般利用者の端末を測定端末として想定しているため、端末ごとの機種差・Android プラットフォーム差により、取得できる指標の有無や取得値の挙動が異なる可能性がある。差を後から把握できるよう、端末属性を各スキャン記録に付与する。</span><span class="evidence">[確認済: CLAUDE.md「このアプリの役割（手段）」]</span></li>
+<li><span class="added">屋外測定の前提: 本研究は屋外での利用を前提としているため、各スキャン記録に測定地点の位置情報を付与する。</span><span class="evidence">[確認済: CLAUDE.md「重要な設計方針」]</span></li>
+</ul>
+
+<p><span class="added">以下、(A) 直接取得指標から導出した分析用指標、(B) スキャン単位の付与情報、(C) 測定端末の属性、(D) 測定地点の位置情報、の順に定義を述べる。</span></p>
+
+<p><strong>(A) 直接取得指標から導出した分析用指標</strong></p>
+
+<p><span class="added">研究目的の集計と可読性のため、Android プラットフォームが返す整数コードや OS 内部の記述文字列を、研究データとして扱いやすい単位・分類ラベルへ変換する。変換後の指標を表 b-1 に示す。</span><span class="evidence">[推測: 変換の動機は研究データ用途から推定]</span></p>
+
+<figcaption>表 b-1: 直接取得指標から導出した分析用指標</figcaption>
+<table>
+<thead><tr><th>指標名</th><th>内容</th><th>導出元</th></tr></thead>
+<tbody>
+<tr><td>OUI</td><td>BSSID の先頭 24 ビット（16 進表記 6 桁、コロン区切りで 8 文字）。IEEE が発行するベンダー識別子に対応する。ベンダー単位の集計を可能にするため抽出する。</td><td>BSSID<span class="evidence">[確認済: WifiUtils.kt:127]</span></td></tr>
+<tr><td>周波数帯ラベル</td><td>中心周波数を「2.4GHz 帯」「5GHz 帯」「6GHz 帯」「Unknown」のいずれかに分類したラベル。帯域別集計を可能にするため分類する。</td><td>中心周波数<span class="evidence">[確認済: WifiUtils.kt:9-14]</span></td></tr>
+<tr><td>チャネル幅</td><td>当該 BSSID が運用するチャネルの占有帯域幅を物理量（MHz 単位の整数値）として表したもの。Android プラットフォームが返すのはチャネル幅種別コード（内部の列挙値）であり、研究データとしては物理量が必要なため変換する。値は 20 / 40 / 80 / 160 / 320 MHz のいずれか。</td><td>Android プラットフォームが返すチャネル幅種別コード<span class="evidence">[確認済: WifiUtils.kt:109-117]</span></td></tr>
+<tr><td>準拠 IEEE 802.11 規格ラベル</td><td>準拠 IEEE 802.11 規格の世代コード（整数値）を「802.11a/b/g」「802.11n」「802.11ac」「802.11ax」「802.11ad」「802.11be」「Unknown」のいずれかに変換した人間可読な文字列。</td><td>準拠 IEEE 802.11 規格（世代コード）<span class="evidence">[確認済: WifiUtils.kt:16-24]</span></td></tr>
+<tr><td>セキュリティ分類ラベル</td><td>当該 BSSID のセキュリティ方式を「Open」「WEP」「WPA」「WPA2」「WPA3」「WPA2/WPA3」のいずれかに分類したラベル。暗号・認証方式の記述文字列は OS や端末により表現が異なるため、既知のセキュリティ方式分類へ還元する。</td><td>暗号・認証方式の記述文字列、または Android API レベル 33 以降で利用可能なセキュリティ種別列挙値<span class="evidence">[確認済: WifiUtils.kt:26-70]</span></td></tr>
+</tbody>
+</table>
+
+<p><strong>(B) スキャン単位の付与情報</strong></p>
+
+<p><span class="added">スキャン結果をサーバで複数端末・複数測定日時の記録と統合するため、個々のスキャンを区別・紐付ける識別子・時刻・ラベルを付与する。付与情報を表 b-2 に示す。</span></p>
+
+<figcaption>表 b-2: スキャン単位の付与情報</figcaption>
+<table>
+<thead><tr><th>指標名</th><th>内容</th><th>付与方法</th></tr></thead>
+<tbody>
+<tr><td>スキャン識別子</td><td>1 回のスキャンを一意に識別する UUID。スキャン結果を個別に識別するために付与する。</td><td>アプリケーションがスキャン実行時に UUID を生成<span class="evidence">[確認済: SimpleMeasurementActivity.kt:385, 449]</span></td></tr>
+<tr><td>スキャン時刻</td><td>スキャン実行時の端末ローカル時刻を表す文字列。時系列解析のために付与する。</td><td>アプリケーションがスキャン時に端末時計から取得<span class="evidence">[確認済: SimpleMeasurementActivity.kt:430, 456]</span></td></tr>
+<tr><td>セッションラベル</td><td>測定セッションを識別する文字列。自動スキャン時に連続する複数のスキャン結果を一つのセッションとして紐付けるために付与する。手動スキャン時は空文字。</td><td>自動スキャン時にアプリケーションがセッション UUID または時刻範囲文字列を付与<span class="evidence">[確認済: SimpleMeasurementActivity.kt:387, 457, 472-506]</span></td></tr>
+</tbody>
+</table>
+
+<p><strong>(C) 測定端末の属性</strong></p>
+
+<p><span class="added">本アプリケーションは多数の一般利用者の端末を測定端末として想定している。端末ごとの機種差・Android プラットフォーム差により取得挙動が異なる可能性があるため、端末属性を各スキャン記録に付与する。</span><span class="evidence">[確認済: CLAUDE.md「このアプリの役割（手段）」]</span>
+<span class="added">付与する端末属性を表 b-3 に示す。</span></p>
+
+<figcaption>表 b-3: 測定端末の属性</figcaption>
+<table>
+<thead><tr><th>指標名</th><th>内容</th><th>取得方法</th></tr></thead>
+<tbody>
+<tr><td>端末識別子</td><td>測定端末を一意に識別する UUID。複数端末の測定記録を端末単位で区別するために付与する。</td><td>アプリケーション初回起動時に UUID を生成し、端末内に永続保存する<span class="evidence">[確認済: SimpleMeasurementActivity.kt:551-556]</span></td></tr>
+<tr><td>端末製造者名</td><td>測定端末の製造者名を表す文字列。</td><td>Android プラットフォームが保持する値を取得<span class="evidence">[確認済: SimpleMeasurementActivity.kt:452]</span></td></tr>
+<tr><td>端末機種名</td><td>測定端末の機種名を表す文字列。</td><td>Android プラットフォームが保持する値を取得<span class="evidence">[確認済: SimpleMeasurementActivity.kt:453]</span></td></tr>
+<tr><td>Android プラットフォームバージョン</td><td>測定端末の Android プラットフォームの API レベルを表す整数値。</td><td>Android プラットフォームが保持する値を取得<span class="evidence">[確認済: SimpleMeasurementActivity.kt:454]</span></td></tr>
+</tbody>
+</table>
+
+<p><strong>(D) 測定地点の位置情報</strong></p>
+
+<p><span class="added">本研究は屋外での利用を前提としているため、</span><span class="evidence">[確認済: CLAUDE.md「重要な設計方針」]</span>
+<span class="added">各スキャン記録に測定地点の緯度・経度および位置推定精度を付与する。位置情報を表 b-4 に示す。</span></p>
+
+<figcaption>表 b-4: 測定地点の位置情報</figcaption>
+<table>
+<thead><tr><th>指標名</th><th>内容</th><th>取得方法</th></tr></thead>
+<tbody>
+<tr><td>緯度</td><td>測定地点の緯度（度単位）。GPS から取得できない場合は空とする。</td><td>GPS から取得<span class="evidence">[確認済: SimpleMeasurementActivity.kt:460]</span></td></tr>
+<tr><td>経度</td><td>測定地点の経度（度単位）。GPS から取得できない場合は空とする。</td><td>GPS から取得<span class="evidence">[確認済: SimpleMeasurementActivity.kt:461]</span></td></tr>
+<tr><td>位置推定精度</td><td>緯度・経度の水平推定誤差（m 単位）。</td><td>GPS から取得<span class="evidence">[確認済: SimpleMeasurementActivity.kt:462]</span></td></tr>
+</tbody>
+</table>
+
+<h4>5.1.3 機能詳細</h4>
+
+<p><span class="added">処理手順を実行順に示す。</span></p>
+
+<ol>
+<li><span class="added">測定者が画面上の「スキャン」ボタンを押下する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:189-193]</span></li>
+<li><span class="added">ACCESS_FINE_LOCATION 権限を確認する。API 31 以上では NEARBY_WIFI_DEVICES 権限も確認する。未許可であれば ActivityResultContracts.RequestMultiplePermissions で要求する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:115-125, 318-329、AndroidManifest.xml:5-12]</span></li>
+<li><span class="added">自動スキャンがオフのときは、FusedLocationProviderClient.getCurrentLocation() に Priority.PRIORITY_HIGH_ACCURACY を指定して現在位置を取得する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:349-362]</span></li>
+<li><span class="added">WifiManager.isWifiEnabled が false の場合は Toast を表示し、スキャンを中止する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:333-336]</span></li>
+<li><span class="added">WifiManager.startScan() を呼び出し、スキャン要求を発行する。戻り値が false の場合（スロットリングされた場合）は Toast を表示し、スキャンを中止する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:344-347]</span></li>
+<li><span class="added">SCAN_RESULTS_AVAILABLE_ACTION のブロードキャストを BroadcastReceiver で受信する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:109-113, 266]</span></li>
+<li><span class="added">WifiManager.scanResults から ScanResult 一覧を取得する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:378]</span></li>
+<li><span class="added">各 AP について、以下の変換を行う。<ul>
+  <li>band: ScanResult.frequency から導出（2400〜2500 MHz → 「2.4GHz」、4900〜5924 MHz → 「5GHz」、5925 MHz 以上 → 「6GHz」、それ以外 → 「Unknown」）。<span class="evidence">[確認済: WifiUtils.kt:9-14]</span></li>
+  <li>channel_width_mhz: ScanResult.channelWidth を 20 / 40 / 80 / 160 / 320 MHz に変換（CHANNEL_WIDTH_80MHZ_PLUS_MHZ は 160、整数値 5 は 320 として扱う）。<span class="evidence">[確認済: WifiUtils.kt:109-117]</span></li>
+  <li>wifi_standard: ScanResult.wifiStandard を規格ラベル文字列に変換。<span class="evidence">[確認済: WifiUtils.kt:16-24]</span></li>
+  <li>security: Build.VERSION.SDK_INT が TIRAMISU (API 33) 以上のときは ScanResult.securityTypes を集合として解析し、PSK と SAE の両方が含まれる場合は「WPA2/WPA3」、SAE/OWE/WPA3 EAP のいずれかが含まれる場合は「WPA3」、PSK のみの場合は capabilities の WPA2/RSN の有無で「WPA2」または「WPA」を区別、EAP または Passpoint がある場合は「WPA2」、WEP がある場合は「WEP」、それ以外は「Open」と判定する。API 33 未満では capabilities 文字列に対して同様の優先順位で判定する。<span class="evidence">[確認済: WifiUtils.kt:26-70]</span></li>
+  <li>mld_mac_address: Build.VERSION.SDK_INT が TIRAMISU 以上かつ ScanResult.apMldMacAddress が null でないときのみ値を設定し、それ以外は null とする。<span class="evidence">[確認済: WifiUtils.kt:118-120]</span></li>
+</ul></span></li>
+<li><span class="added">スキャン 1 回分について UUID を生成し scan_id とする。各 AP の情報と、端末情報（Build.MANUFACTURER / Build.MODEL / Build.VERSION.SDK_INT）、永続保存した端末 UUID（device_id）、スキャン時刻（ロケール依存の yyyy-MM-dd'T'HH:mm:ss 形式）、ラベル、位置情報を 1 件の JSON オブジェクトにまとめる。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:385, 429-468, 551-556]</span></li>
+<li><span class="added">構成した JSON オブジェクトを端末内の JSON 配列ファイル（pending_simple_scans.json）に追記する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:410, 469、ScanData.kt:76-80]</span></li>
+<li><span class="added">「測定直後に送信」モードが有効な場合、端末内ファイルに保留されたすべての JSON オブジェクトを 1 件ずつ POST 送信し、成功したものから削除する。送信中に失敗が発生した場合はその時点で送信を打ち切り、残りは次回の送信機会に試行する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:415-417, 508-549]</span></li>
+<li><span class="added">自動スキャンが有効な場合、スキャン開始時刻から 5000 ms 経過後に次のスキャンをスケジュールする。</span><span class="evidence">[確認済: ScanData.kt:29、SimpleMeasurementActivity.kt:395-398, 422-425]</span></li>
+</ol>
+
+<p><span class="added">使用する主な Android API: WifiManager.startScan()、WifiManager.scanResults、ScanResult、SUPPLICANT_STATE_CHANGED_ACTION、SCAN_RESULTS_AVAILABLE_ACTION、FusedLocationProviderClient、SharedPreferences、HttpURLConnection。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt 全体]</span></p>
+
+<p><span class="added">定数値: 自動スキャン間隔 5000 ms、HTTP 接続タイムアウト 5000 ms、HTTP 読み込みタイムアウト 10000 ms。</span><span class="evidence">[確認済: ScanData.kt:29、SimpleMeasurementActivity.kt:525-526]</span></p>
+
+<p><span class="added">スキップ・失敗条件:</span></p>
+<ul>
+<li><span class="added">WifiManager.isWifiEnabled が false: スキャンを実行せず中止する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:333-336]</span></li>
+<li><span class="added">権限（ACCESS_FINE_LOCATION）が未許可: スキャンを実行せず権限要求を行う。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:115-125, 318-329]</span></li>
+<li><span class="added">WifiManager.startScan() が false を返す（スロットリング）: Toast を表示してスキャンを中止する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:344-348]</span></li>
+<li><span class="added">スキャン結果が 0 件: 画面を「空」表示に更新してその回の処理を終了する。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:389-400]</span></li>
+<li><span class="added">HTTP 応答コードが 200〜299 の範囲外、または例外発生、またはタイムアウト: 当該 JSON オブジェクトを端末内に保持したまま送信を打ち切る。</span><span class="evidence">[確認済: SimpleMeasurementActivity.kt:519-544]</span></li>
+</ul>
+
+<h3>5.2 サプリカント状態取得機能</h3>
+
+<h4>5.2.1 概要</h4>
+
+<p>
+<span class="added">サプリカント状態取得機能は、スキャンで検出した AP に対して順次接続要求を発行し、SUPPLICANT_STATE_CHANGED_ACTION ブロードキャストで通知される SupplicantState の遷移を記録する機能である。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:85-122, 140-159, 163-262]</span>
+<span class="added">取得する指標は 3.2.1 の表 a-2 に示した supplicant_states、supplicant_final_state、supplicant_elapsed_ms、supplicant_api_calls である。</span><span class="evidence">[確認済: ScanData.kt:50-53、ConnectionMeasurementActivity.kt:948-965]</span>
+<span class="added">測定の対象は、スキャン後にユーザが選択した AP 群（手動測定時）、またはスキャンで検出した全 AP（自動スキャン時）である。</span><span class="evidence">[確認済: ConnectionMeasurementActivity.kt:282-307, 611-612, 843-852, 904-928]</span>
+<span class="added">取得した測定値は、ビーコンスキャン機能の結果と同一の AccessPoint オブジェクトに付加され、データ構成部が JSON へ変換して pending_scans.json に追記し、データ送信部へ渡す。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:256-261、ConnectionMeasurementActivity.kt:675, 931-991]</span>
+</p>
+
+<h4>5.2.3 機能詳細</h4>
+
+<p><span class="added">処理手順を実行順に示す。</span></p>
+
+<ol>
+<li><span class="added">Activity の生成時に、SUPPLICANT_STATE_CHANGED_ACTION を IntentFilter に指定した BroadcastReceiver を登録する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:124-131、ConnectionMeasurementActivity.kt:388]</span></li>
+<li><span class="added">測定対象の AP 一覧が確定すると、以下の 3〜13 を AP 1 件ごとに順番に繰り返す。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:140-159]</span></li>
+<li><span class="added">測定開始時刻を記録し、状態遷移リスト、Continuation 参照、各種早期終了フラグを初期化する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:163-172]</span></li>
+<li><span class="added">BSSID から android.net.MacAddress を構築し、WifiNetworkSpecifier.Builder に setBssid、必要に応じて setSsid を設定する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:275-279]</span></li>
+<li><span class="added">セキュリティ分類に応じて WifiNetworkSpecifier.Builder に以下のいずれかを設定する。<ul>
+  <li>security が「WEP」: null を返して本 AP をスキップ扱いとする（最終状態は SKIPPED）。<span class="evidence">[確認済: SupplicantMeasurer.kt:174-177, 281]</span></li>
+  <li>EAP 系（API 33 以上の WifiConfiguration.SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT を含む場合）: setWpa3Enterprise192BitModeConfig() にダミー WifiEnterpriseConfig（PEAP + MSCHAPV2 + ユーザ "DUMMY_USER" + パスワード "DUMMY_MEAS_12345"）を設定する。<span class="evidence">[確認済: SupplicantMeasurer.kt:292, 301-314]</span></li>
+  <li>EAP 系（WPA3 Enterprise 標準モード）: setWpa3EnterpriseStandardModeConfig() に同ダミー構成を設定する。<span class="evidence">[確認済: SupplicantMeasurer.kt:293, 310-313]</span></li>
+  <li>その他の EAP: setWpa2EnterpriseConfig() に同ダミー構成を設定する。<span class="evidence">[確認済: SupplicantMeasurer.kt:315]</span></li>
+  <li>OWE: setIsEnhancedOpen(true) を設定する。<span class="evidence">[確認済: SupplicantMeasurer.kt:316]</span></li>
+  <li>security が「WPA3」または「WPA2/WPA3」: setWpa3Passphrase("DUMMY_MEAS_12345") を設定する。<span class="evidence">[確認済: SupplicantMeasurer.kt:317-318]</span></li>
+  <li>security が「WPA2」または「WPA」: setWpa2Passphrase("DUMMY_MEAS_12345") を設定する。<span class="evidence">[確認済: SupplicantMeasurer.kt:319-320]</span></li>
+  <li>security が「Open」: パスフレーズ指定なしで Builder.build() する。<span class="evidence">[確認済: SupplicantMeasurer.kt:308-322]</span></li>
+</ul></span></li>
+<li><span class="added">NetworkRequest.Builder に TRANSPORT_WIFI と上記 WifiNetworkSpecifier を設定して NetworkRequest を構築する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:179-182]</span></li>
+<li><span class="added">ConnectivityManager.NetworkCallback を生成し、onAvailable() で最終状態を "NETWORK_AVAILABLE" に設定して Continuation を再開するよう定義する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:187-195]</span></li>
+<li><span class="added">kotlinx.coroutines.withTimeoutOrNull(10000L) 内で suspendCancellableCoroutine を開始し、Continuation への参照を保持する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:200-202]</span></li>
+<li><span class="added">無変化タイマーを 3000 ms で起動する。Continuation 参照をセットした後に ConnectivityManager.requestNetwork(request, callback, Handler) を呼び出す。例外が発生した場合は結果に例外クラス名とメッセージを記録し、最終状態を REQUEST_FAILED と判定するフラグを立てて Continuation を再開する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:209-222]</span></li>
+<li><span class="added">BroadcastReceiver が SupplicantState を受信するたびに、状態名と測定開始からの経過ミリ秒を状態遷移リストに追加する。状態受信ごとに無変化タイマーを 3338 ms にリセットする。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:86-99]</span></li>
+<li><span class="added">以下の条件のいずれかで Continuation を早期に再開する。<ul>
+  <li>SupplicantState.COMPLETED を受信: 早期終了フラグを立てて再開する（最終状態は AUTH_COMPLETED）。<span class="evidence">[確認済: SupplicantMeasurer.kt:101-104, 238-245]</span></li>
+  <li>SupplicantState.ASSOCIATED を受信かつ ASSOCIATED 早期終了モードが有効: フラグを立てて再開する（最終状態は PRE_TIMEOUT_ASSOCIATED）。<span class="evidence">[確認済: SupplicantMeasurer.kt:105-110, 237]</span></li>
+  <li>SupplicantState.DISCONNECTED を受信かつ、それまでに ASSOCIATING / ASSOCIATED / FOUR_WAY_HANDSHAKE / GROUP_HANDSHAKE のいずれかを受信していた場合: フラグを立てて再開する（最終状態は PRE_TIMEOUT_&lt;一つ前の状態&gt;）。<span class="evidence">[確認済: SupplicantMeasurer.kt:111-118, 238-244]</span></li>
+  <li>NetworkCallback.onAvailable() が呼ばれた場合: 再開する（最終状態は NETWORK_AVAILABLE）。<span class="evidence">[確認済: SupplicantMeasurer.kt:188-194, 236]</span></li>
+  <li>無変化タイマーが発火した場合: 再開する（最終状態は、遷移リストが空でなければ最も進んだ状態を用いて IDLE_&lt;state&gt;、空であれば IDLE_NULL）。<span class="evidence">[確認済: SupplicantMeasurer.kt:74-81, 246-249]</span></li>
+</ul></span></li>
+<li><span class="added">10000 ms（withTimeoutOrNull のタイムアウト）が経過しても早期終了条件が成立しなかった場合、最終状態は、遷移リストが空でなければ最も進んだ状態を用いて TIMEOUT_&lt;state&gt;、空であれば TIMEOUT_NULL とする。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:200, 250-253]</span></li>
+<li><span class="added">無変化タイマーを停止し、ConnectivityManager.unregisterNetworkCallback() でコールバックを解除する。経過ミリ秒と遷移リスト、API 呼び出し記録、最終状態を測定結果として記録する。次の AP に進む前に 300 ms 待機する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:155, 225-262]</span></li>
+<li><span class="added">全 AP の測定が完了したら、各 AP の測定結果をデータ構成部へ渡す。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:140-159、ConnectionMeasurementActivity.kt:669-675]</span></li>
+</ol>
+
+<p><span class="added">使用する主な Android API: ConnectivityManager.requestNetwork、ConnectivityManager.NetworkCallback、ConnectivityManager.unregisterNetworkCallback、WifiNetworkSpecifier.Builder、NetworkRequest.Builder、NetworkCapabilities.TRANSPORT_WIFI、WifiEnterpriseConfig、SupplicantState、SUPPLICANT_STATE_CHANGED_ACTION、BroadcastReceiver、MacAddress、Handler、kotlinx.coroutines.suspendCancellableCoroutine、kotlinx.coroutines.withTimeoutOrNull。</span><span class="evidence">[確認済: SupplicantMeasurer.kt 全体]</span></p>
+
+<p><span class="added">定数値: 試行開始から最初の状態を待つ無変化タイムアウト 3000 ms、状態受信後に次の状態を待つ無変化タイムアウト 3338 ms、全体タイムアウト 10000 ms、ダミーパスフレーズ "DUMMY_MEAS_12345"、AP 間の待機 300 ms。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:27-30, 155]</span></p>
+
+<p><span class="added">スキップ・失敗条件:</span></p>
+<ul>
+<li><span class="added">security が「WEP」: 対象 AP の測定をスキップし、最終状態 SKIPPED で記録する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:281, 174-177]</span></li>
+<li><span class="added">BSSID から MacAddress が構築できない: 対象 AP の測定をスキップする（最終状態 SKIPPED）。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:276, 174-177]</span></li>
+<li><span class="added">ConnectivityManager.requestNetwork() が例外をスローした: 最終状態 REQUEST_FAILED で記録する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:212-220, 235]</span></li>
+<li><span class="added">状態遷移が 1 件も受信されず無変化タイマーが発火: 最終状態 IDLE_NULL。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:246-249]</span></li>
+<li><span class="added">10000 ms 経過しても早期終了条件も無変化タイマー発火も起きない: 最終状態は遷移リストに基づき TIMEOUT_&lt;state&gt; または TIMEOUT_NULL。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:250-253]</span></li>
+</ul>
+
+<h3>5.3 スループット測定機能</h3>
+
+<h4>5.3.1 概要</h4>
+
+<p>
+<span class="added">スループット測定機能は、端末が現在接続中の AP を経由して指定サーバからファイルを HTTP ダウンロードし、所要時間と転送バイト数からスループット（Mbps）を算出する機能である。</span><span class="evidence">[確認済: ThroughputActivity.kt:270-323]</span>
+<span class="added">取得する指標は 3.2.1 の表 a-3 に示した latitude、longitude、ssid、rssi、wifistandard、downloadfilesize、measure_time、throughput である。</span><span class="evidence">[確認済: ThroughputActivity.kt:49-58, 330-339]</span>
+<span class="added">測定の対象は、測定ボタン押下時点で端末が接続中の AP 1 台である。</span><span class="evidence">[確認済: ThroughputActivity.kt:237-268]</span>
+<span class="added">取得した測定値は Gson により JSON 文字列に変換され、データ送信部が選択された送信先サーバ URL へ HTTP POST で送信する。端末内への保留は行わない。</span><span class="evidence">[確認済: ThroughputActivity.kt:34, 330-340, 343-371]</span>
+</p>
+
+<h4>5.3.2 機能詳細</h4>
+
+<p><span class="added">処理手順を実行順に示す。</span></p>
+
+<ol>
+<li><span class="added">Activity 生成時に ACCESS_FINE_LOCATION 権限を確認し、未許可の場合は要求する。</span><span class="evidence">[確認済: ThroughputActivity.kt:83-89, 107-110]</span></li>
+<li><span class="added">測定者がダウンロード元ファイル URL と送信先サーバ URL を Spinner から選択する。「自分で入力」を選んだ場合は EditText から URL を読み取る。</span><span class="evidence">[確認済: ThroughputActivity.kt:128-159]</span></li>
+<li><span class="added">測定者が「測定開始」ボタンを押下する。</span><span class="evidence">[確認済: ThroughputActivity.kt:161-192]</span></li>
+<li><span class="added">FusedLocationProviderClient.getCurrentLocation() に Priority.PRIORITY_HIGH_ACCURACY を指定して緯度・経度を取得する。取得に失敗した場合は Toast を表示して測定を中断する。</span><span class="evidence">[確認済: ThroughputActivity.kt:203-234]</span></li>
+<li><span class="added">WifiManager.connectionInfo から接続中 AP の SSID、RSSI、wifiStandard を取得する。SSID が null または文字列 "&lt;unknown ssid&gt;" の場合は測定を中断する。</span><span class="evidence">[確認済: ThroughputActivity.kt:237-268]</span></li>
+<li><span class="added">API 30 以上では WifiInfo.wifiStandard の値から規格ラベル（"802.11be" / "802.11ax" / "802.11ac" / "802.11n" / 2.4GHz 帯なら "802.11b/g" それ以外なら "802.11a" / "Unknown"）に変換する。API 30 未満では WifiInfo.frequency から 2.4GHz 帯なら "2.4GHz帯 (b/g/n)"、5GHz 帯なら "5GHz帯 (a/n/ac)"、その他は "Unknown" とする。</span><span class="evidence">[確認済: ThroughputActivity.kt:243-259]</span></li>
+<li><span class="added">測定開始時刻を System.currentTimeMillis() で記録する。</span><span class="evidence">[確認済: ThroughputActivity.kt:272]</span></li>
+<li><span class="added">kotlinx.coroutines.withTimeoutOrNull(5000L) 内で以下を実行する。<ul>
+  <li>java.net.URL(downloadFileUrl).openConnection() as java.net.HttpURLConnection で接続を開く。</li>
+  <li>useCaches = false、Cache-Control: no-cache、Pragma: no-cache をリクエストヘッダに設定する。</li>
+  <li>8192 バイト（8 × 1024）のバッファで InputStream.read() を戻り値が -1 になるまで繰り返し、総バイト数を加算する。</li>
+  <li>InputStream と HttpURLConnection を閉じる。</li>
+</ul></span><span class="evidence">[確認済: ThroughputActivity.kt:281-294]</span></li>
+<li><span class="added">5000 ms でタイムアウトした場合はタイムアウトフラグを立てる。例外が発生した場合は Toast を表示して測定を中断する。</span><span class="evidence">[確認済: ThroughputActivity.kt:294, 316-322]</span></li>
+<li><span class="added">終了時刻と経過時間（秒）、スループット（Mbps = 総バイト数 × 8 ÷ (経過秒 × 1,000,000)、経過秒が 0 の場合は 0.0）、ダウンロードファイルサイズ（総バイト数 ÷ 1,000,000、MB 単位の整数）を算出する。</span><span class="evidence">[確認済: ThroughputActivity.kt:296-299]</span></li>
+<li><span class="added">緯度、経度、SSID（前後の引用符を除去）、RSSI、規格ラベル、ファイルサイズ、所要時間、スループットを FlatCollectedData 風の単一オブジェクトにまとめ、Gson.toJson() で JSON 文字列に変換する。</span><span class="evidence">[確認済: ThroughputActivity.kt:49-58, 325-341]</span></li>
+<li><span class="added">kotlinx.coroutines.withTimeoutOrNull(5000L) 内で以下を実行する。<ul>
+  <li>java.net.URL(destinationServerUrl).openConnection() as java.net.HttpURLConnection。</li>
+  <li>requestMethod = "POST"、Content-Type: application/json、doOutput = true。</li>
+  <li>OutputStreamWriter に UTF-8 で JSON を書き出す。</li>
+  <li>responseCode を取得し、200 でなければ例外として扱う。</li>
+</ul></span><span class="evidence">[確認済: ThroughputActivity.kt:343-357]</span></li>
+<li><span class="added">送信が成功した場合は測定回数カウンタをインクリメントし、画面に表示する。失敗した場合は Toast を表示する（端末内への保留は行わない）。</span><span class="evidence">[確認済: ThroughputActivity.kt:170-177, 359-369]</span></li>
+</ol>
+
+<p><span class="added">使用する主な Android API: WifiManager.connectionInfo、WifiInfo.wifiStandard、WifiInfo.rssi、WifiInfo.ssid、WifiInfo.frequency、ScanResult（規格定数 WIFI_STANDARD_11BE 等）、FusedLocationProviderClient.getCurrentLocation、Priority.PRIORITY_HIGH_ACCURACY、java.net.URL、java.net.HttpURLConnection、kotlinx.coroutines.withTimeoutOrNull、com.google.gson.Gson。</span><span class="evidence">[確認済: ThroughputActivity.kt 全体]</span></p>
+
+<p><span class="added">定数値: ダウンロードタイムアウト 5000 ms、送信タイムアウト 5000 ms、ダウンロード読み込みバッファサイズ 8192 バイト（8 × 1024）、スループット算出分母 1,000,000、ファイルサイズ算出分母 1,000,000。</span><span class="evidence">[確認済: ThroughputActivity.kt:281, 286, 298-299, 344]</span></p>
+
+<p><span class="added">スキップ・失敗条件:</span></p>
+<ul>
+<li><span class="added">ACCESS_FINE_LOCATION 権限未許可: Toast を表示し測定を中断する。</span><span class="evidence">[確認済: ThroughputActivity.kt:204-210]</span></li>
+<li><span class="added">位置情報取得失敗（null 返却または例外）: Toast を表示し測定を中断する。</span><span class="evidence">[確認済: ThroughputActivity.kt:216-233]</span></li>
+<li><span class="added">WifiManager.connectionInfo から SSID が取得できない、または "&lt;unknown ssid&gt;": null を返し測定を中断する。</span><span class="evidence">[確認済: ThroughputActivity.kt:241]</span></li>
+<li><span class="added">ダウンロード処理が 5000 ms でタイムアウト: 途中までの総バイト数で算出し、ファイルサイズ表示に「(途中)」、終了時刻表示に「(タイムアウト)」を付与する。</span><span class="evidence">[確認済: ThroughputActivity.kt:294, 301-302]</span></li>
+<li><span class="added">ダウンロード中に例外発生: Toast を表示し null を返して測定全体を中断する。</span><span class="evidence">[確認済: ThroughputActivity.kt:316-322]</span></li>
+<li><span class="added">送信時にタイムアウト（5000 ms）、例外発生、または応答コードが 200 以外: Toast を表示し失敗として扱う。端末内への保留は行わない。</span><span class="evidence">[確認済: ThroughputActivity.kt:344-369]</span></li>
+</ul>
+
+<h2>付録 A: 用語対応表</h2>
+
+<table>
+<thead><tr><th>草稿／本文での用語</th><th>対応するコード上の識別子</th><th>備考</th></tr></thead>
+<tbody>
+<tr><td>測定部</td><td>SimpleMeasurementActivity、ConnectionMeasurementActivity、SupplicantMeasurer、ThroughputActivity</td><td>各測定機能を担う 3 つの Activity と Supplicant 測定の委譲クラス。</td></tr>
+<tr><td>データ構成部</td><td>SimpleMeasurementActivity.saveToPending、ConnectionMeasurementActivity.saveToPending、ThroughputActivity.collectData、ScanStore</td><td>JSON オブジェクト／JSON 文字列の構築、および端末内 JSON ファイルへの追記を担う。</td></tr>
+<tr><td>データ送信部</td><td>SimpleMeasurementActivity.trySendAllPending、ConnectionMeasurementActivity.trySendAllPending、ThroughputActivity.sendJsonToServer</td><td>HTTP POST 送信と失敗時処理を担う。</td></tr>
+<tr><td>ビーコンスキャン機能（APスキャン機能）</td><td>SimpleMeasurementActivity 全体、WifiUtils.groupByBssid、WifiUtils.getSecurity ほか</td><td>WifiManager.startScan() によるビーコン受信と ScanResult の整形。</td></tr>
+<tr><td>サプリカント状態取得機能（パケット交換状態取得機能）</td><td>SupplicantMeasurer 全体、ConnectionMeasurementActivity.startMeasurementCycleAp</td><td>ConnectivityManager.requestNetwork() と SUPPLICANT_STATE_CHANGED_ACTION による接続試行時の状態記録。</td></tr>
+<tr><td>スループット測定機能</td><td>ThroughputActivity 全体（measureThroughput、fetchLocation、fetchWifiInfo、collectData、sendJsonToServer）</td><td>HttpURLConnection による HTTP ダウンロードとスループット算出。</td></tr>
+<tr><td>端末内の保留ファイル</td><td>pending_simple_scans.json（ビーコンスキャン単独）、pending_scans.json（サプリカント併用）</td><td>ScanData.kt:23-24 に定数定義。</td></tr>
+<tr><td>サプリカント状態の最終状態</td><td>supplicant_final_state</td><td>SupplicantMeasurer.kt:174-253 にて算出される文字列。AUTH_COMPLETED、PRE_TIMEOUT_&lt;state&gt;、IDLE_&lt;state&gt;、IDLE_NULL、TIMEOUT_&lt;state&gt;、TIMEOUT_NULL、NETWORK_AVAILABLE、REQUEST_FAILED、SKIPPED のいずれか。</td></tr>
+</tbody>
+</table>
+
+<h2>付録 B: 草稿とコードの相違</h2>
+
+<ol>
+<li><strong>サプリカント測定の対象</strong><br>
+草稿 3.2.1: 「パケット交換状態取得機能」の「測定の対象は検出した全APである」。<br>
+コード: 手動測定経路では、スキャン結果から測定者が選択した AP のみが測定対象となる。全 AP が測定対象になるのは自動スキャン経路のみ。<span class="evidence">[確認済: ConnectionMeasurementActivity.kt:282-307, 611-612, 843-852, 904-928]</span><br>
+本文での対応: 5.1 概要および 3.2.1 本文で「手動測定時はユーザが選択した AP、自動スキャン時は検出した全 AP」と記述した。
+</li>
+<li><strong>送信経路の分離</strong><br>
+草稿 3.2.3: 「データ送信部は、データ構成部が構成したデータをサーバへ送信する」（送信経路が 1 つであるかのような記述）。<br>
+コード: ビーコンスキャン機能／サプリカント状態取得機能の送信経路と、スループット測定機能の送信経路は別実装・別 URL・別 JSON 構造であり、送信先サーバ URL も独立に設定される。<span class="evidence">[確認済: ScanData.kt:14-28、SimpleMeasurementActivity.kt:508-549、ConnectionMeasurementActivity.kt:993-1034、ThroughputActivity.kt:343-371]</span><br>
+本文での対応: 3.2.3 本文で「送信先の URL はビーコンスキャン機能、サプリカント状態取得機能、スループット測定機能でそれぞれ独立に設定可能」と記述した。
+</li>
+<li><strong>送信タイミングと失敗時の扱い</strong><br>
+草稿 3.2.3: 「【測定ごと／一定件数ごと】に送信する。送信に失敗した場合は、【再送する／端末内に保持する】」。<br>
+コード: ビーコンスキャン／サプリカントは UI スイッチにより「測定直後の送信」と「保留」の 2 モードを切替、失敗時は端末内 JSON ファイルを保持し次の送信機会に再送試行する。スループットは測定ごとに 1 回送信し、失敗時は保留せず Toast 表示のみ。<span class="evidence">[確認済: SimpleMeasurementActivity.kt:160-167, 415-417, 508-549、ConnectionMeasurementActivity.kt:193-200, 677-678, 993-1034、ThroughputActivity.kt:161-192, 343-371]</span><br>
+本文での対応: 3.2.3 本文でこの実装通りに記述した。
+</li>
+<li><strong>測定値に対応付ける「時刻」</strong><br>
+草稿 3.2.1: 「測定部は、取得した測定値に位置情報と時刻を対応付け、データ構成部へ渡す」。<br>
+コード: ビーコン／サプリカントの送信 JSON には scanned_at（ISO 8601 風の時刻文字列）が含まれるが、スループット測定の送信 JSON には時刻フィールドが含まれず、ダウンロード所要時間 measure_time のみが含まれる。<span class="evidence">[確認済: SimpleMeasurementActivity.kt:430, 456、ConnectionMeasurementActivity.kt:932, 977、ThroughputActivity.kt:49-58, 325-341]</span><br>
+本文での対応: 3.2.1 末尾に「スループット測定機能は時刻を測定値として JSON に格納しない」と補足した。
+</li>
+</ol>
+
+<h2>付録 C: 「不明」とした項目</h2>
+
+<ol>
+<li><strong>サーバ側のデータベース記録処理</strong>: 草稿 3.2.3 で「3.3節で述べるサーバ側で受信され、データベースに記録される」とあるが、本プロジェクトのソースコードには Android クライアント側の実装のみが含まれており、サーバ側の受信スクリプトおよびデータベーススキーマは参照できない。<span class="evidence">[確認済: リポジトリ構造／コード内容]</span></li>
+</ol>
+
+</body>
+</html>

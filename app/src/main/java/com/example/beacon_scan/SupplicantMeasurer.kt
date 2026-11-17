@@ -23,6 +23,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val DIALOG_TIMEOUT_MS = 10_000L
 private const val FIRST_STATE_TIMEOUT_MS = 3_000L // 試行開始から最初の状態を待つ時間
@@ -163,6 +166,7 @@ class SupplicantMeasurer(
     private suspend fun measureForAp(ap: AccessPoint): AccessPoint {
         val startMs = System.currentTimeMillis()
         measureStartMs = startMs
+        val connectionStartedAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.getDefault()).format(Date(startMs))
         supplicantTransitions.clear()
         supplicantContinuation = null
         brEarlyExitOccurred = false
@@ -172,6 +176,7 @@ class SupplicantMeasurer(
         val apiCalls = mutableListOf<SupplicantApiCall>()
 
         val specifier = buildSpecifier(ap) ?: return ap.copy(
+            connectionStartedAt = connectionStartedAt,
             supplicantFinalState = "SKIPPED",
             supplicantElapsedMs = 0L
         )
@@ -254,6 +259,7 @@ class SupplicantMeasurer(
         }
 
         return ap.copy(
+            connectionStartedAt = connectionStartedAt,
             supplicantStates = transitions,
             supplicantFinalState = finalState,
             supplicantElapsedMs = elapsed,

@@ -945,6 +945,7 @@ WiFi接続プロセスの状態遷移を記録する機能。
                 put("wifi_standard_code", ap.wifiStandardCode)
                 put("security", ap.security)
                 put("capabilities_raw", ap.capabilitiesRaw)
+                put("connection_started_at", ap.connectionStartedAt ?: JSONObject.NULL)
                 put("supplicant_states", JSONArray().also { arr ->
                     ap.supplicantStates.forEach { entry ->
                         arr.put(JSONObject().apply {

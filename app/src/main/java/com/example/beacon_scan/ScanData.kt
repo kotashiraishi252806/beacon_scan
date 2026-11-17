@@ -47,6 +47,7 @@ data class AccessPoint(
     val security: String,
     val capabilitiesRaw: String,
     val securityTypesRaw: List<Int> = emptyList(),
+    val connectionStartedAt: String? = null,
     val supplicantStates: List<SupplicantStateEntry> = emptyList(),
     val supplicantFinalState: String = "NOT_MEASURED",
     val supplicantElapsedMs: Long = -1L,
@@ -315,7 +316,7 @@ class ApAdapter(
         val ap = items[position]
         holder.tvBssid.text = if (ap.mldMacAddress != null) "${ap.bssid}  (MLD: ${ap.mldMacAddress})" else ap.bssid
         holder.tvSsids.text = if (ap.ssids.isEmpty()) "(非公開)" else ap.ssids.joinToString(" / ")
-        holder.tvSignal.text = "${ap.rssiDbm} dBm  |  ${ap.band}  |  ${ap.channelWidthMhz}MHz幅"
+        holder.tvSignal.text = "${ap.rssiDbm} dBm  |  ${ap.band}  |  ${ap.frequencyMhz}MHz  |  ${ap.channelWidthMhz}MHz幅"
         holder.tvStandard.text = "${ap.wifiStandard} (${ap.wifiStandardCode})"
         holder.tvSecurity.text = ap.security
 
