@@ -339,9 +339,20 @@ li { margin: 0.3em 0; }
 
 <p>
 <span class="added">サプリカント状態取得機能は、スキャンで検出した AP に対して順次接続要求を発行し、SUPPLICANT_STATE_CHANGED_ACTION ブロードキャストで通知される SupplicantState の遷移を記録する機能である。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:85-122, 140-159, 163-262]</span>
-<span class="added">取得する指標は 3.2.1 の表 a-2 に示した supplicant_states、supplicant_final_state、supplicant_elapsed_ms、supplicant_api_calls である。</span><span class="evidence">[確認済: ScanData.kt:50-53、ConnectionMeasurementActivity.kt:948-965]</span>
+<span class="added">取得する指標は 3.2.1 の表 a-2 に示した 3 項目（supplicant_states、supplicant_final_state、supplicant_elapsed_ms）に加え、5.2.2 で定義する接続要求 API 呼び出しログ（supplicant_api_calls）を含む計 4 項目である。</span><span class="evidence">[確認済: ScanData.kt:50-53、ConnectionMeasurementActivity.kt:948-965]</span>
 <span class="added">測定の対象は、スキャン後にユーザが選択した AP 群（手動測定時）、またはスキャンで検出した全 AP（自動スキャン時）である。</span><span class="evidence">[確認済: ConnectionMeasurementActivity.kt:282-307, 611-612, 843-852, 904-928]</span>
 <span class="added">取得した測定値は、ビーコンスキャン機能の結果と同一の AccessPoint オブジェクトに付加され、データ構成部が JSON へ変換して pending_scans.json に追記し、データ送信部へ渡す。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:256-261、ConnectionMeasurementActivity.kt:675, 931-991]</span>
+</p>
+
+<h4>5.2.2 取得する指標の定義</h4>
+
+<p><span class="added">3.2.1 の表 a-2 では、本機能の主要出力である 3 指標（サプリカント状態遷移、最終状態、測定所要時間）を示した。これらに加えて、本機能はサプリカント状態遷移が一切観測されなかった場合に、その原因を切り分けられるよう、接続試行の起点となる API 呼び出し自体の実行結果も記録する。この追加指標の定義を以下に示す。</span></p>
+
+<p><strong>接続要求 API 呼び出しログ</strong></p>
+
+<p><span class="added">本機能は、サプリカント状態遷移を観測するため、測定対象 AP への接続を Android に要求する API を呼び出す。接続要求 API 呼び出しログは、その API 呼び出しについて、呼び出し時の経過時間（測定開始からの ms）と呼び出し結果（例外が発生しなければ "OK"、発生した場合は例外クラス名とメッセージを連結した文字列）を記録したログである。</span><span class="evidence">[確認済: ScanData.kt:33-34、SupplicantMeasurer.kt:164-165, 172, 211-217]</span>
+<span class="added">1 件の AP 測定について、通常は 1 要素（API 呼び出しが 1 回実行される）、WEP セキュリティでスキップされた AP では 0 要素となる。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:172, 174-177, 211-217]</span>
+<span class="added">この記録により、API 呼び出し自体が例外で失敗したケース（状態遷移が一切観測されない）と、API 呼び出しは成功したが AP 側の応答がなくタイムアウトしたケースを区別できる。</span><span class="evidence">[推測: コード構造から]</span>
 </p>
 
 <h4>5.2.3 機能詳細</h4>

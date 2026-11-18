@@ -32,6 +32,11 @@ private const val FIRST_STATE_TIMEOUT_MS = 3_000L // 試行開始から最初の
 private const val NEXT_STATE_TIMEOUT_MS = 3_338L  // 状態受信後に次の状態を待つ時間
 private const val DUMMY_PASSPHRASE = "DUMMY_MEAS_12345"
 
+// タイムアウトモード
+// MODE1_IDLE_RESET: 現行方式。無変化タイマー(3000ms/3338ms) + 全体10sキャップ
+// MODE2_FIXED_TOTAL: ユーザ入力タイムアウトを1APの上限とし、無変化タイマー無効
+enum class TimeoutMode { MODE1_IDLE_RESET, MODE2_FIXED_TOTAL }
+
 /**
  * APへの順次Supplicant測定を担うクラス。
  * MainActivity から接続試行・状態記録・タイムアウト管理を切り出したもの。
@@ -63,6 +68,12 @@ class SupplicantMeasurer(
 
     // ASSOCIATED受信時に即移行するモードが有効かどうか（measureAll()呼び出し前に設定）
     @Volatile private var earlyExitOnAssociated = false
+
+    // タイムアウトモード（measureAll()呼び出し前に設定）
+    @Volatile private var timeoutMode: TimeoutMode = TimeoutMode.MODE1_IDLE_RESET
+
+    // MODE2時のAPあたりタイムアウト値(ms)
+    @Volatile private var mode2TimeoutMs: Long = 30_000L
 
     // ASSOCIATED受信による早期終了が発生したかどうか
     @Volatile private var associatedEarlyExitOccurred = false
@@ -97,29 +108,37 @@ class SupplicantMeasurer(
             supplicantTransitions.add(SupplicantStateEntry(state.name, System.currentTimeMillis() - measureStartMs))
             val cont = supplicantContinuation ?: return
             if (!cont.isActive) return
-            // 状態を受信するたびに無変化タイマーを3338msにリセット
-            idleHandler.removeCallbacks(idleTimeoutRunnable)
-            idleHandler.postDelayed(idleTimeoutRunnable, NEXT_STATE_TIMEOUT_MS)
-            when (state) {
-                SupplicantState.COMPLETED -> {
-                    brEarlyExitOccurred = true
-                    cont.resume(Unit)
-                }
-                SupplicantState.ASSOCIATED -> {
-                    if (earlyExitOnAssociated) {
-                        associatedEarlyExitOccurred = true
-                        cont.resume(Unit)
-                    }
-                }
-                SupplicantState.DISCONNECTED -> {
-                    if (supplicantTransitions.any {
-                        it.state == "ASSOCIATING" || it.state == "ASSOCIATED" || it.state == "FOUR_WAY_HANDSHAKE" || it.state == "GROUP_HANDSHAKE"
-                    }) {
+            if (timeoutMode == TimeoutMode.MODE1_IDLE_RESET) {
+                // MODE1: 状態を受信するたびに無変化タイマーを3338msにリセット
+                idleHandler.removeCallbacks(idleTimeoutRunnable)
+                idleHandler.postDelayed(idleTimeoutRunnable, NEXT_STATE_TIMEOUT_MS)
+                when (state) {
+                    SupplicantState.COMPLETED -> {
                         brEarlyExitOccurred = true
                         cont.resume(Unit)
                     }
+                    SupplicantState.ASSOCIATED -> {
+                        if (earlyExitOnAssociated) {
+                            associatedEarlyExitOccurred = true
+                            cont.resume(Unit)
+                        }
+                    }
+                    SupplicantState.DISCONNECTED -> {
+                        if (supplicantTransitions.any {
+                            it.state == "ASSOCIATING" || it.state == "ASSOCIATED" || it.state == "FOUR_WAY_HANDSHAKE" || it.state == "GROUP_HANDSHAKE"
+                        }) {
+                            brEarlyExitOccurred = true
+                            cont.resume(Unit)
+                        }
+                    }
+                    else -> {}
                 }
-                else -> {}
+            } else {
+                // MODE2: COMPLETED のみで早期終了。無変化タイマー・ASSOCIATED・DISCONNECTED早期終了は作動させない
+                if (state == SupplicantState.COMPLETED) {
+                    brEarlyExitOccurred = true
+                    cont.resume(Unit)
+                }
             }
         }
     }
@@ -145,9 +164,13 @@ class SupplicantMeasurer(
         onProgress: (Int, Int, String) -> Unit,
         onApStart: (AccessPoint) -> Unit = {},
         onApFinished: (AccessPoint) -> Unit = {},
-        earlyExitOnAssociated: Boolean = false
+        earlyExitOnAssociated: Boolean = false,
+        timeoutMode: TimeoutMode = TimeoutMode.MODE1_IDLE_RESET,
+        mode2TimeoutMs: Long = 30_000L
     ): List<AccessPoint> {
-        this.earlyExitOnAssociated = earlyExitOnAssociated
+        this.earlyExitOnAssociated = earlyExitOnAssociated && timeoutMode == TimeoutMode.MODE1_IDLE_RESET
+        this.timeoutMode = timeoutMode
+        this.mode2TimeoutMs = mode2TimeoutMs
         val results = mutableListOf<AccessPoint>()
         for ((i, ap) in apList.withIndex()) {
             onProgress(i + 1, apList.size, ap.ssids.firstOrNull() ?: ap.bssid)
@@ -158,6 +181,7 @@ class SupplicantMeasurer(
             delay(300)
         }
         this.earlyExitOnAssociated = false
+        this.timeoutMode = TimeoutMode.MODE1_IDLE_RESET
         return results
     }
 
@@ -199,10 +223,12 @@ class SupplicantMeasurer(
             }
         }
 
-        // 単一待機：最大10秒
-        // onAvailable / onUnavailable / terminal state / 状態無変化タイマー のいずれかで早期終了
+        // 単一待機
+        // MODE1: 最大10秒。onAvailable / terminal state / 状態無変化タイマー のいずれかで早期終了
+        // MODE2: 最大mode2TimeoutMs。onAvailable / COMPLETED / 例外 のいずれかで早期終了
         // continuation設定後にrequestNetworkを呼ぶことでonUnavailableとのレース条件を回避
-        withTimeoutOrNull(DIALOG_TIMEOUT_MS) {
+        val waitTimeoutMs = if (timeoutMode == TimeoutMode.MODE1_IDLE_RESET) DIALOG_TIMEOUT_MS else mode2TimeoutMs
+        withTimeoutOrNull(waitTimeoutMs) {
             suspendCancellableCoroutine<Unit> { cont ->
                 supplicantContinuation = cont
                 supplicantCallback = cb
@@ -211,8 +237,10 @@ class SupplicantMeasurer(
                     supplicantCallback = null
                     runCatching { connectivityManager.unregisterNetworkCallback(cb) }
                 }
-                // 最初の状態を待つタイマー（3000ms）を開始
-                idleHandler.postDelayed(idleTimeoutRunnable, FIRST_STATE_TIMEOUT_MS)
+                if (timeoutMode == TimeoutMode.MODE1_IDLE_RESET) {
+                    // 最初の状態を待つタイマー（3000ms）を開始（MODE1のみ）
+                    idleHandler.postDelayed(idleTimeoutRunnable, FIRST_STATE_TIMEOUT_MS)
+                }
                 val callMs = System.currentTimeMillis() - startMs
                 val callResult = runCatching {
                     connectivityManager.requestNetwork(request, cb, Handler(Looper.getMainLooper()))
@@ -227,7 +255,7 @@ class SupplicantMeasurer(
             }
         }
 
-        // 無変化タイマーを停止
+        // 無変化タイマーを停止（MODE1でpostDelayed済みなら解除、MODE2は未投入のためno-op）
         idleHandler.removeCallbacks(idleTimeoutRunnable)
         supplicantContinuation = null
         supplicantCallback = null

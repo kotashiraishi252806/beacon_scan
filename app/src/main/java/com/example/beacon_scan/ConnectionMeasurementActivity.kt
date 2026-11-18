@@ -19,6 +19,9 @@ import android.view.View
 import com.google.android.material.appbar.MaterialToolbar
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.EditText
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -77,6 +80,10 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
     private lateinit var switchAutoScan: SwitchCompat
     private lateinit var switchSendMode: SwitchCompat
     private lateinit var switchAssociatedEarlyExit: SwitchCompat
+    private lateinit var radioGroupTimeoutMode: RadioGroup
+    private lateinit var radioMode1: RadioButton
+    private lateinit var radioMode2: RadioButton
+    private lateinit var editMode2TimeoutSec: EditText
     private lateinit var etUrl: TextInputEditText
     private lateinit var tvEmpty: TextView
     private lateinit var tvAutoScanStatus: TextView
@@ -96,6 +103,8 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
     private var sessionId: String? = null
     private var sessionStartTime: Date? = null
     private var selectedBssids: Set<String> = emptySet()
+    private var sessionTimeoutMode: TimeoutMode = TimeoutMode.MODE1_IDLE_RESET
+    private var sessionMode2TimeoutMs: Long = 30_000L
 
     // ── 位置情報 ─────────────────────────────────────────────
     private var latestLocation: Location? = null
@@ -115,6 +124,8 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
     // ── 自動スキャン ──────────────────────────────────────────
     private var autoScanSessionId: String? = null
     private var autoScanStartTime: Date? = null
+    private var autoScanTimeoutMode: TimeoutMode = TimeoutMode.MODE1_IDLE_RESET
+    private var autoScanMode2TimeoutMs: Long = 30_000L
     private var isAutoScanPaused = false
     private val autoScanHandler = Handler(Looper.getMainLooper())
     private val autoScanRunnable = object : Runnable {
@@ -183,6 +194,10 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         switchAutoScan = findViewById(R.id.switchAutoScan)
         switchSendMode = findViewById(R.id.switchSendMode)
         switchAssociatedEarlyExit = findViewById(R.id.switchAssociatedEarlyExit)
+        radioGroupTimeoutMode = findViewById(R.id.radioGroupTimeoutMode)
+        radioMode1 = findViewById(R.id.radioMode1)
+        radioMode2 = findViewById(R.id.radioMode2)
+        editMode2TimeoutSec = findViewById(R.id.editMode2TimeoutSec)
         etUrl = findViewById(R.id.etUrl)
         tvEmpty = findViewById(R.id.tvEmpty)
         tvAutoScanStatus = findViewById(R.id.tvAutoScanStatus)
@@ -203,6 +218,13 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         switchAssociatedEarlyExit.setOnCheckedChangeListener { _, isChecked ->
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putBoolean(KEY_ASSOCIATED_EARLY_EXIT, isChecked).apply()
+        }
+
+        // タイムアウトモード選択
+        radioGroupTimeoutMode.setOnCheckedChangeListener { _, checkedId ->
+            val isMode2 = checkedId == R.id.radioMode2
+            editMode2TimeoutSec.isEnabled = isMode2
+            switchAssociatedEarlyExit.isEnabled = !isMode2
         }
 
         adapter = ApAdapter(apList) { count ->
@@ -231,6 +253,7 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         }
 
         btnNextLocation.setOnClickListener {
+            if (!checkMode2InputBeforeMeasurement()) return@setOnClickListener
             layoutMoveButtons.visibility = View.GONE
             checkPermissionsAndScan()
         }
@@ -238,13 +261,15 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         btnEndSession.setOnClickListener {
             val sid = sessionId ?: return@setOnClickListener
             val startTime = sessionStartTime ?: return@setOnClickListener
+            val tmode = sessionTimeoutMode
+            val tms = sessionMode2TimeoutMs
             sessionId = null
             sessionStartTime = null
             selectedBssids = emptySet()
             hideScanResultsView()
             btnScan.isEnabled = true
             tvEmpty.visibility = View.VISIBLE
-            showAutoLabelDialog(sid, startTime)
+            showAutoLabelDialog(sid, startTime, tmode, tms)
         }
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -269,6 +294,7 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         }
 
         btnScan.setOnClickListener {
+            if (!checkMode2InputBeforeMeasurement()) return@setOnClickListener
             saveUrl()
             if (isInSelectionMode) {
                 isInSelectionMode = false
@@ -281,6 +307,7 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
         }
 
         btnMeasureSelected.setOnClickListener {
+            if (!checkMode2InputBeforeMeasurement()) return@setOnClickListener
             val selectedAps = adapter.getSelectedItems()
             if (selectedAps.isEmpty()) return@setOnClickListener
             val scanId = pendingScanId ?: return@setOnClickListener
@@ -298,6 +325,8 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
                     if (sessionId == null) {
                         sessionId = UUID.randomUUID().toString()
                         sessionStartTime = Date()
+                        sessionTimeoutMode = currentTimeoutMode()
+                        sessionMode2TimeoutMs = mode2TimeoutMs()
                     }
                     selectedBssids = selectedAps.map { it.bssid }.toSet()
                     startMeasurementCycleAp(selectedAps, location, scanId)
@@ -350,6 +379,8 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
                 }
                 autoScanSessionId = UUID.randomUUID().toString()
                 autoScanStartTime = Date()
+                autoScanTimeoutMode = currentTimeoutMode()
+                autoScanMode2TimeoutMs = mode2TimeoutMs()
                 isAutoScanPaused = false
                 btnPauseAutoScan.text = "一時停止"
                 btnPauseAutoScan.visibility = View.VISIBLE
@@ -374,10 +405,12 @@ class ConnectionMeasurementActivity : AppCompatActivity() {
                 tvAutoScanStatus.visibility = View.GONE
                 val sessionId = autoScanSessionId
                 val startTime = autoScanStartTime
+                val tmode = autoScanTimeoutMode
+                val tms = autoScanMode2TimeoutMs
                 autoScanSessionId = null
                 autoScanStartTime = null
                 if (sessionId != null && startTime != null) {
-                    showAutoLabelDialog(sessionId, startTime)
+                    showAutoLabelDialog(sessionId, startTime, tmode, tms)
                 } else {
                     if (!isScanInProgress) updatePendingCount()
                 }
@@ -551,12 +584,21 @@ WiFi接続プロセスの状態遷移を記録する機能。
         return saved.ifEmpty { DEFAULT_SERVER_URL }
     }
 
-    private fun showAutoLabelDialog(sessionId: String, startTime: Date) {
+    private fun showAutoLabelDialog(
+        sessionId: String,
+        startTime: Date,
+        timeoutMode: TimeoutMode,
+        mode2TimeoutMs: Long
+    ) {
         val fmt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
         val endTime = Date()
         val startStr = fmt.format(startTime)
         val endStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(endTime)
-        val autoLabel = "$startStr~$endStr"
+        val modeSuffix = when (timeoutMode) {
+            TimeoutMode.MODE1_IDLE_RESET -> "MODE1"
+            TimeoutMode.MODE2_FIXED_TOTAL -> "MODE2(${mode2TimeoutMs / 1000}s)"
+        }
+        val autoLabel = "$startStr~$endStr $modeSuffix"
 
         val editText = com.google.android.material.textfield.TextInputEditText(this).apply {
             setText(autoLabel)
@@ -660,7 +702,9 @@ WiFi接続プロセスの状態遷移を記録する機能。
                         adapter.notifyDataSetChanged()
                     }
                 },
-                earlyExitOnAssociated = switchAssociatedEarlyExit.isChecked
+                earlyExitOnAssociated = switchAssociatedEarlyExit.isChecked,
+                timeoutMode = currentTimeoutMode(),
+                mode2TimeoutMs = mode2TimeoutMs()
             )
 
             btnStopMeasurement.visibility = View.GONE
@@ -685,6 +729,25 @@ WiFi接続プロセスの状態遷移を記録する機能。
             layoutMoveButtons.visibility = View.VISIBLE
             updatePendingCount()
         }
+    }
+
+    private fun currentTimeoutMode(): TimeoutMode =
+        if (radioMode2.isChecked) TimeoutMode.MODE2_FIXED_TOTAL else TimeoutMode.MODE1_IDLE_RESET
+
+    private fun mode2TimeoutSecOrNull(): Int? {
+        val sec = editMode2TimeoutSec.text?.toString()?.trim()?.toIntOrNull() ?: return null
+        return if (sec in 1..60) sec else null
+    }
+
+    private fun mode2TimeoutMs(): Long = (mode2TimeoutSecOrNull() ?: 30) * 1000L
+
+    // モード2選択かつ入力値が1-60外（空・非数値含む）なら測定開始不可
+    private fun checkMode2InputBeforeMeasurement(): Boolean {
+        if (currentTimeoutMode() == TimeoutMode.MODE2_FIXED_TOTAL && mode2TimeoutSecOrNull() == null) {
+            Toast.makeText(this, "モード2のタイムアウト値を1-60秒で入力してください", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        return true
     }
 
     private fun hideScanResultsView() {
@@ -848,7 +911,9 @@ WiFi接続プロセスの状態遷移を記録する機能。
                         val remaining = total - progress
                         tvSsidCount.text = "今回検出: ${total}件\nSupplicant測定中 $progress/$total (残り${remaining}件): $name"
                     },
-                    earlyExitOnAssociated = switchAssociatedEarlyExit.isChecked
+                    earlyExitOnAssociated = switchAssociatedEarlyExit.isChecked,
+                    timeoutMode = currentTimeoutMode(),
+                    mode2TimeoutMs = mode2TimeoutMs()
                 )
 
                 btnStopMeasurement.visibility = View.GONE
