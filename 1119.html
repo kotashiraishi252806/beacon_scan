@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>修士論文 5.2節 サプリカント状態取得機能 修正案 (2026-11-20)</title>
+<style>
+body { font-family: "Hiragino Mincho ProN", "Yu Mincho", "MS Mincho", serif; line-height: 1.9; max-width: 960px; margin: 2em auto; padding: 0 1.2em; color: #222; }
+h1, h2, h3, h4 { padding-bottom: 0.3em; font-family: "Hiragino Sans", "Meiryo", "Yu Gothic", sans-serif; }
+h1 { font-size: 1.6em; border-bottom: 2px solid #444; }
+h2 { font-size: 1.4em; border-bottom: 1px solid #888; margin-top: 2em; }
+h3 { font-size: 1.2em; border-bottom: 1px dotted #aaa; margin-top: 1.5em; }
+h4 { font-size: 1.05em; border-bottom: none; margin-top: 1.2em; }
+p { margin: 0.8em 0; text-indent: 1em; }
+.added { background-color: #e3f2fd; padding: 2px 4px; }
+.evidence { font-size: 0.78em; color: #666; margin-left: 0.2em; font-family: "Hiragino Sans", sans-serif; }
+.guess { color: #c62828; font-weight: bold; font-size: 0.78em; margin-left: 0.2em; font-family: "Hiragino Sans", sans-serif; }
+.unchecked { color: #ef6c00; font-weight: bold; font-size: 0.78em; margin-left: 0.2em; font-family: "Hiragino Sans", sans-serif; }
+.note { background-color: #fafafa; border-left: 3px solid #888; padding: 0.5em 1em; margin: 1em 0; font-size: 0.92em; color: #333; font-family: "Hiragino Sans", sans-serif; }
+.note p { text-indent: 0; }
+.legend { font-size: 0.9em; background-color: #fafafa; border: 1px solid #ccc; padding: 10px 14px; margin: 1em 0; border-radius: 4px; font-family: "Hiragino Sans", sans-serif; }
+.legend span { padding: 2px 6px; margin: 0 4px; }
+table { border-collapse: collapse; margin: 1em 0; width: 100%; font-size: 0.95em; }
+th, td { border: 1px solid #999; padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background-color: #f0f0f0; }
+figcaption { font-weight: bold; margin: 0.6em 0 0.3em 0; }
+ol li, ul li { margin: 0.3em 0; }
+ol li p, ul li p { text-indent: 0; }
+code { font-family: "Menlo", "Consolas", monospace; font-size: 0.92em; }
+</style>
+</head>
+<body>
+<h1>修士論文 5.2節 サプリカント状態取得機能 修正案（2026-11-20）</h1>
+
+<div class="legend">
+  <strong>凡例:</strong>
+  <span class="added">AI補完・修正した文</span>
+  <span class="evidence">[確認済: ファイル名:行番号]</span>
+  <span class="unchecked">[未確認]</span>
+  <span class="guess">[要参考文献 / 推測]</span>
+</div>
+
+<div class="note">
+<strong>本稿の方針:</strong>
+<ul>
+<li>章タイトルおよびコード上の呼称「サプリカント状態」と、草稿本文の「パケット交換状態」との用語不一致を解消するため、本稿では「サプリカント状態」に統一した<span class="unchecked">[未確認: 先行研究論文での呼称]</span>。</li>
+<li>5.2.1 においては技術詳細に立ち入らない方針のため、WEP を対象外とする実装上の扱いについては 5.2.2（機能詳細）において述べる。</li>
+<li>先行研究における測定対象は「単一のアクセスポイントのみ」と一般化した。SSID および認証方式の具体名は論文側の実験章に委ねる。</li>
+<li>本稿における本文中では、Android SDK が提供する API 名および IEEE 標準で定義される用語を除き、本プロジェクト内部で定義したクラス名・関数名・変数名・定数名については言及しない方針とする。表 4 の「フィールド名」欄および [確認済] 注記に現れるものは、再現性のための参照情報として許容する。</li>
+</ul>
+</div>
+
+<h3>5.2 サプリカント状態取得機能</h3>
+
+<h4>5.2.1 概要</h4>
+
+<p><span class="added">これまで無線LAN環境の把握に資する指標として、RSSI が広く用いられてきた。RSSI とはモバイル端末が無線LANアクセスポイントから受信した電波強度を表す物理層の指標であり、これを可視化したヒートマップによって電波受信状況を把握することは可能である。しかしながら RSSI は、物理層より上位のレイヤにおける接続可否や通信状況を反映する指標ではないため、HTTP などの上位層プロトコルを用いる Web サイト閲覧や動画視聴の可否を把握する用途には適していない。</span></p>
+
+<p><span class="added">上位層通信の可否を把握するための指標としては、スループットが知られている。スループットを測定することにより、電波の到達範囲に加え、通信状況や品質に関する詳細な情報を得ることが可能となる。しかしながらその測定にはアクセスポイントとの認証成立が前提となり、認証前の段階において測定することはできない。本研究は周辺の無線LAN環境を網羅的に把握することを目的としているため、認証を要する指標のみに依拠した場合、認証情報を保有しないアクセスポイントとの通信可否を観測することが不可能となり、目的の達成に対する制約となる。</span></p>
+
+<p><span class="added">この制約に対し、先行研究 [1] においては、認証成立前にモバイル端末上で取得可能な指標として、サプリカント状態の遷移が提案されている。サプリカント状態とは、<code>wpa_supplicant</code> が管理する認証・接続の進行段階を示す状態機械の値であり、Android 端末においては <code>SUPPLICANT_STATE_CHANGED_ACTION</code> ブロードキャスト [2] を介して取得することができる。本指標は RSSI よりも上位のレイヤにおけるアクセスポイントとの双方向通信の進行度を反映しており、認証が成立する以前の段階においても、アクセスポイントとの通信可否を推定し得る点に特徴を有する。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:17, 98-144, 298-306]</span></p>
+
+<p><span class="added">先行研究においては、サプリカント状態の遷移内容が無線LANセキュリティ規格に応じて変化することが報告されている。認証を要する WPA2 および WPA3 においても、認証前段階における状態遷移を観測することによってアクセスポイントとの通信可否が把握可能であるとされる。</span><span class="unchecked">[未確認: 先行研究論文の該当節]</span></p>
+
+<p><span class="added">他方、先行研究における実測評価の対象は単一のアクセスポイントに限られていた<span class="evidence">[確認済: 先行研究サプリカント取得アプリ/MonitoringConnectingWifi.kt:58]</span>。本研究が目的とする周辺無線LAN環境の網羅的な把握のためには、検出された個々のアクセスポイントについて通信可否を取得し得ることが必要である。したがって、単一アクセスポイントに限定された先行研究の測定範囲は、本研究の目的を達成するうえで不十分であると判断される。</span></p>
+
+<p><span class="added">以上を踏まえ、本機能では、WiFi スキャンによって検出された周辺のアクセスポイントに対し順次接続要求を発行し、各アクセスポイントに対するサプリカント状態の遷移を記録することを目的として実装を行った。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:162-186]</span></p>
+
+<h4>5.2.2 機能詳細</h4>
+
+<div class="note">
+<strong>本節での雛形からの訂正点:</strong>
+<ul>
+<li><strong>プローブ要求と接続試行の関係</strong>: 雛形では「接続試行とは、端末が AP へプローブ要求を送信すること」と記述されていたが、IEEE 802.11 の用語上、これは誤りである。プローブ要求（Probe Request）はスキャン段階における AP 発見のための管理フレームであり、特定 AP への接続開始時に送信されるのは認証要求（Authentication Request）および結合要求（Association Request）である<span class="guess">[要参考文献: IEEE 802.11-2020 §11.3]</span>。本稿では「接続試行」を、端末が特定 AP に対して認証・結合手続きの開始を要求する動作と定義する。</li>
+<li><strong><code>ConnectivityManager</code> の属性</strong>: 雛形では <code>ConnectivityManager</code> がハードウェアであるかのように記述されていたが、これは Android フレームワーク層のシステムサービスであり、ハードウェアではない<span class="guess">[要参考文献: Android Developers <code>ConnectivityManager</code> ドキュメント]</span>。本稿ではフレームワーク層のサービスとして記述する。</li>
+<li><strong>徒歩速度の換算</strong>: 雛形では「秒速 1.5 m（時速 10 km）」と記述されていたが、1.5 m/s × 3.6 = 5.4 km/h であるため、時速 10 km は誤りである。本稿では「1.5 m/s（約 5.4 km/h）」に統一し、10 秒間に 15 m 離れるという試算を採用する<span class="guess">[要参考文献: 徒歩平均速度の出典]</span>。</li>
+<li><strong><code>onUnavailable</code> の扱い</strong>: 雛形では「<code>onUnavailable</code> が通知される」と記述されていたが、現行実装においては <code>NetworkCallback</code> の <code>onAvailable()</code> のみが実装されており、<code>onUnavailable()</code> は実装されていない<span class="evidence">[確認済: SupplicantMeasurer.kt:216-224]</span>。測定は、<code>onAvailable</code> の発火、サプリカント状態遷移の終端、無変化タイマー、全体タイムアウトのいずれかによって終了する。本稿では現行の挙動に即して記述する。</li>
+<li>雛形中の [参考文献 N] は暫定で <code>[要参考文献: 概要]</code> の形式で残している。番号確定後に差し替えるものとする。</li>
+</ul>
+</div>
+
+<h4>全体の流れ</h4>
+
+<p><span class="added">現時点における本機能は、測定者が静止した状態で 1 地点の測定を完結させることを前提として開発している<span class="guess">[推測: 徒歩移動中の連続測定は主たる想定ではない]</span>。測定手順は以下の 3 段階から構成される。</span></p>
+
+<ol>
+<li><span class="added">スキャン（周辺アクセスポイントの検出）。</span></li>
+<li><span class="added">接続試行（検出された各アクセスポイントに対する認証・結合要求と状態観測）。</span></li>
+<li><span class="added">データ送信（測定結果のサーバへの送信）。</span></li>
+</ol>
+
+<p><span class="added">スキャンおよび接続試行は、1 地点の測定において 1 セットとして実行される。測定者は、このセットを地点ごとに繰り返し、n 地点の測定を終えた時点において、最後にデータ送信を行う<span class="guess">[推測: 実装上はスキャン完了直後の都度送信も可能であるが、本節では「n 地点終了後に一括して送信する」利用手順を前提とする]</span>。</span></p>
+
+<p><span class="added">本節においては、上記 3 段階を処理単位に細分化した以下の 5 ステップについて、利用する Android API と、記録される情報とを対応づけて述べる。</span></p>
+
+<ol>
+<li><span class="added">ステップ 1 ビーコンスキャン: 端末が自身の電波受信範囲内のアクセスポイントを検出する。</span></li>
+<li><span class="added">ステップ 2 測定対象 BSSID リストの作成: 検出結果を BSSID 単位の一覧に整形したうえで、測定対象を確定する。</span></li>
+<li><span class="added">ステップ 3 接続試行: 各 BSSID に対して順に接続試行を行い、サプリカント状態遷移を記録する。</span></li>
+<li><span class="added">ステップ 4 ラベル付与: 各試行結果に対して最終状態ラベルを付与する。</span></li>
+<li><span class="added">ステップ 5 データ送信: 全測定結果を JSON に整形し、HTTP を介してサーバへ送信する。</span></li>
+</ol>
+
+<h4>ステップ 1: ビーコンスキャン</h4>
+
+<p><span class="added">本ステップは、端末が周辺アクセスポイントのビーコンまたはプローブ応答を受信し、これを検出する処理である。この手続きはビーコンスキャン機能と同一であるため、具体的な処理手順については 5.1.3 を参照されたい。本機能においては、スキャン完了時に <code>WifiManager.scanResults</code> から得られる <code>ScanResult</code> の一覧が次ステップの入力となる。</span><span class="evidence">[確認済: ConnectionMeasurementActivity.kt:816-848, 850-889]</span></p>
+
+<h4>ステップ 2: 測定対象 BSSID リストの作成</h4>
+
+<p><span class="added">ステップ 1 において得られた <code>ScanResult</code> の一覧は、BSSID 単位のオブジェクト一覧へと整形される。この整形処理においては、同一 BSSID に属する複数の <code>ScanResult</code> のうち最大の RSSI を代表値として採用し、結果リストを RSSI の降順にソートしたうえで返却する<span class="evidence">[確認済: WifiUtils.kt:100-140, 139]</span>。</span></p>
+
+<p><span class="added">整形後のリストは測定端末の画面上に BSSID・SSID・RSSI 等とともに表示され、測定者は任意の BSSID を選択することによって接続試行の対象とすることができる。一般的な測定手順としては、検出された全 BSSID を選択することが想定されている<span class="guess">[推測: 周辺 AP 全件の通信可否を把握するという本研究の目的に適う既定の利用方法]</span>。選択は画面操作によって確定するほか、自動スキャンモードが有効である場合には、検出された全 BSSID がそのまま測定対象として採用される<span class="evidence">[確認済: ConnectionMeasurementActivity.kt:311-332, 906-917]</span>。</span></p>
+
+<h4>ステップ 3: 接続試行</h4>
+
+<p><span class="added">本ステップにおいては、ステップ 2 で確定した測定対象 BSSID リストの各要素に対して、1 件ずつ接続試行が行われる。1 回のスキャンにおいて n 個の BSSID が検出された場合、本ステップは n 回の試行処理を直列に実行する。試行順序は、ステップ 2 において得られた順序、すなわち RSSI の降順である<span class="evidence">[確認済: WifiUtils.kt:139, SupplicantMeasurer.kt:174-186]</span>。本順序の採用について、現時点では明示的な比較実験に基づく根拠を確認することができなかった<span class="guess">[推測: RSSI が強い AP から優先的に試行することには、電波の弱い遠方 AP における長時間待機より先に近傍 AP の結果が得られる利点があるが、他順序との比較実験の記録は確認されない]</span>。</span></p>
+
+<p><span class="added">1 件の接続試行は、「接続要求準備」と「接続要求の発行および状態観測」の 2 つのサブステップから構成される。</span></p>
+
+<p><strong>ステップ 3-1: 接続要求準備</strong></p>
+
+<p><span class="added">IEEE 802.11 における接続開始手続きにおいては、端末が選択した AP のセキュリティ方式に応じて、認証フレームの種別・鍵交換フレームの有無・付随情報要素が変化する<span class="guess">[要参考文献: IEEE 802.11-2020 §12 Security（および WPA3/SAE/OWE に関する改訂）]</span>。そのため、接続要求を発行するに先立ち、対象 AP のセキュリティ分類に応じたパラメータ設定を要する。本機能においては、アプリから特定 AP への接続要求を発行する Android API である <code>WifiNetworkSpecifier</code>（<code>android.net.wifi.WifiNetworkSpecifier.Builder</code>）<span class="guess">[要参考文献: Android Developers <code>WifiNetworkSpecifier</code> ドキュメント]</span>に対し、セキュリティ分類ごとに異なるパスフレーズまたは認証構成を設定したうえで <code>NetworkRequest</code> を構築する。セキュリティ分類別の設定内容を表 1 に示す。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:309-357]</span></p>
+
+<figcaption>表 1 セキュリティ分類ごとの <code>WifiNetworkSpecifier.Builder</code> 設定内容</figcaption>
+<table>
+<thead><tr><th>セキュリティ分類の判定根拠</th><th><code>Builder</code> に設定するメソッドおよび引数</th></tr></thead>
+<tbody>
+<tr><td>WEP</td><td>Specifier を構築せず <code>null</code> を返却する。本機能においては接続試行の対象外とする。理由については本節末「WEP を対象外とする理由」を参照されたい。</td></tr>
+<tr><td>WPA3 Enterprise 192-bit（API 33 以上の <code>SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT</code>）</td><td><code>setWpa3Enterprise192BitModeConfig()</code> に対し、EAP 方式を PEAP、Phase2 を MSCHAPV2 とし、ダミーのユーザ名およびダミーのパスフレーズを設定した <code>WifiEnterpriseConfig</code> を与える。</td></tr>
+<tr><td>WPA3 Enterprise 標準モード（<code>SECURITY_TYPE_EAP_WPA3_ENTERPRISE</code>）</td><td><code>setWpa3EnterpriseStandardModeConfig()</code> に、上記と同一のダミー <code>WifiEnterpriseConfig</code> を与える。</td></tr>
+<tr><td>その他の EAP（<code>SECURITY_TYPE_EAP</code> / Passpoint R1R2 / Passpoint R3、または旧 API において <code>capabilities</code> 文字列が <code>EAP</code> を含み <code>OWE</code> を含まない場合）</td><td><code>setWpa2EnterpriseConfig()</code> に、上記と同一のダミー <code>WifiEnterpriseConfig</code> を与える。</td></tr>
+<tr><td>OWE（API 33 以上の <code>SECURITY_TYPE_OWE</code>、または旧 API において <code>capabilities</code> が <code>OWE</code> を含む場合）</td><td><code>setIsEnhancedOpen(true)</code>。</td></tr>
+<tr><td>WPA3 または WPA2/WPA3 併用</td><td><code>setWpa3Passphrase()</code> にダミーのパスフレーズを与える。</td></tr>
+<tr><td>WPA2 または WPA</td><td><code>setWpa2Passphrase()</code> にダミーのパスフレーズを与える。</td></tr>
+<tr><td>Open</td><td>パスフレーズおよび認証構成の設定を行わず <code>Builder.build()</code> する。</td></tr>
+</tbody>
+</table>
+<p><span class="evidence">[確認済: SupplicantMeasurer.kt:309-357]</span></p>
+
+<p><strong>WEP を対象外とする理由</strong></p>
+<p><span class="added"><code>WifiNetworkSpecifier</code> は Android 10（API 29）において導入された、アプリから特定 AP への接続要求を発行するための API であるが、<code>WifiNetworkSpecifier.Builder</code> には WEP 鍵を設定するためのメソッドが定義されていない<span class="guess">[要参考文献: Android Developers <code>WifiNetworkSpecifier.Builder</code> 公開メソッド一覧、および <code>WifiConfiguration</code> の非推奨化に関するリリースノート]</span>。したがって本機能においては、WEP セキュリティのアクセスポイントを接続試行の対象外とし、最終状態を <code>SKIPPED</code> として記録する<span class="evidence">[確認済: SupplicantMeasurer.kt:315]</span>。</span></p>
+
+<p><strong>EAP に対する接続試行の扱い</strong></p>
+<p><span class="added">EAP を要求するアクセスポイントは、本来、正規の資格情報（証明書・ユーザ名・パスワード等）を保有しない限り、認証に成功することはない。本機能はこの資格情報を保有しないため、便宜的にダミーの <code>WifiEnterpriseConfig</code> を与える。認証の失敗はあらかじめ想定されるが、認証失敗までに観測されるサプリカント状態遷移（<code>AUTHENTICATING</code> への到達の有無等）を記録することが、本機能の目的である<span class="evidence">[確認済: SupplicantMeasurer.kt:335-349]</span>。</span></p>
+
+<p><strong>ステップ 3-2: 接続要求の発行および状態観測</strong></p>
+
+<p><span class="added">本研究においては、「接続試行」を、端末が特定 AP に対して IEEE 802.11 の認証・結合手続きの開始を要求する動作と定義する<span class="guess">[要参考文献: IEEE 802.11-2020 §11.3（Authentication / Association procedures）]</span>。Android 上においてこの要求を発行する API は <code>ConnectivityManager.requestNetwork(request, callback, handler)</code> である<span class="guess">[要参考文献: Android Developers <code>ConnectivityManager#requestNetwork</code> ドキュメント]</span>。本機能は、ステップ 3-1 において構築した <code>NetworkRequest</code> を第 1 引数に、結果通知を受ける <code>NetworkCallback</code> を第 2 引数として、この API を用いる<span class="evidence">[確認済: SupplicantMeasurer.kt:243-249]</span>。</span></p>
+
+<p><span class="added"><code>requestNetwork()</code> の呼出し以降の処理は、以下に述べる手順によって進行する。</span></p>
+
+<ol>
+<li><span class="added">Android フレームワーク層の <code>ConnectivityManager</code> が要求を受理し、Wi-Fi サブシステム（<code>WifiService</code>、HAL、Linux カーネル内の Wi-Fi ドライバ）を介して、ユーザ空間の認証モジュール <code>wpa_supplicant</code> へ、対象 AP への接続指示を伝達する<span class="guess">[要参考文献: Android Open Source Project の Wi-Fi HAL アーキテクチャ資料および <code>wpa_supplicant</code> 公式ドキュメント]</span>。</span></li>
+<li><span class="added"><code>wpa_supplicant</code> は、対象 AP に対して認証フレーム・結合フレーム、および（WPA / WPA2 / WPA3 の場合）4-way ハンドシェイクフレームを順次送受信する<span class="guess">[要参考文献: IEEE 802.11i / IEEE 802.11-2020 §12]</span>。各段階の進行および終了は、Android の <code>WifiManager.SUPPLICANT_STATE_CHANGED_ACTION</code> ブロードキャストとして、<code>SupplicantState</code> 列挙値の形式によりアプリ側へ通知される<span class="guess">[要参考文献: Android Developers <code>SupplicantState</code> ドキュメント]</span>。本機能においては、<code>SUPPLICANT_STATE_CHANGED_ACTION</code> を <code>IntentFilter</code> に登録した <code>BroadcastReceiver</code> がこの通知を受信し、状態名と、測定開始時点からの経過時間（ms）とを 1 要素として、状態遷移の記録に追加する<span class="evidence">[確認済: SupplicantMeasurer.kt:98-108, 147-153]</span>。通知される <code>SupplicantState</code> の種類を表 2 に示す。</span></li>
+<li><span class="added">接続試行の結末は、<code>requestNetwork()</code> に渡した <code>NetworkCallback</code> を通じても通知され得る。<code>onAvailable(network)</code> は、ネットワークが利用可能となったこと、すなわち Android プラットフォームが接続成立と判定した状態を意味する<span class="guess">[要参考文献: Android Developers <code>NetworkCallback#onAvailable</code> ドキュメント]</span>。本機能は <code>onAvailable()</code> のみを実装しており、本メソッドが発火した場合には、最終状態を <code>NETWORK_AVAILABLE</code> として記録し、待機を打ち切る<span class="evidence">[確認済: SupplicantMeasurer.kt:216-224]</span>。なお、本機能はダミーの資格情報を用いるため、WPA / WPA2 / WPA3 の各 AP においては、認証失敗により <code>onAvailable()</code> が発火することは通常ない。Open および OWE のアクセスポイントにおいては認証自体が存在しないため、接続成立後に <code>onAvailable()</code> が発火し得る<span class="guess">[推測: 実測ログを参照して確定するのが望ましい]</span>。<code>onUnavailable()</code> は、現行実装において定義されていないため、発火した場合もアプリ側の処理に影響を及ぼすことはない<span class="evidence">[確認済: SupplicantMeasurer.kt:216-224]</span>。</span></li>
+</ol>
+
+<figcaption>表 2 本機能が <code>BroadcastReceiver</code> を介して受信し得る <code>SupplicantState</code> 列挙値</figcaption>
+<table>
+<thead><tr><th>状態名</th><th>意味（概要）</th></tr></thead>
+<tbody>
+<tr><td><code>DISCONNECTED</code></td><td>AP との接続が存在しない状態、または接続が切断された状態。</td></tr>
+<tr><td><code>INTERFACE_DISABLED</code></td><td>Wi-Fi インタフェースが無効化されている状態。</td></tr>
+<tr><td><code>INACTIVE</code></td><td>Wi-Fi は有効であるが、接続試行が行われていない状態。</td></tr>
+<tr><td><code>SCANNING</code></td><td>スキャン中。</td></tr>
+<tr><td><code>AUTHENTICATING</code></td><td>IEEE 802.11 の認証フレームを交換中の状態。</td></tr>
+<tr><td><code>ASSOCIATING</code></td><td>結合（Association）要求を送信し、応答を待機している状態。</td></tr>
+<tr><td><code>ASSOCIATED</code></td><td>結合が完了した状態。暗号化を要する AP においては、この後 4-way ハンドシェイクに進行する。</td></tr>
+<tr><td><code>FOUR_WAY_HANDSHAKE</code></td><td>WPA / WPA2 / WPA3 の 4-way ハンドシェイクを実行中の状態。</td></tr>
+<tr><td><code>GROUP_HANDSHAKE</code></td><td>グループ鍵ハンドシェイクを実行中の状態。</td></tr>
+<tr><td><code>COMPLETED</code></td><td>認証・結合・鍵交換が完了し、データ通信が可能となった状態。</td></tr>
+<tr><td><code>DORMANT</code></td><td>省電力等により一時停止した状態。</td></tr>
+<tr><td><code>UNINITIALIZED</code></td><td>サプリカントが未初期化の状態。</td></tr>
+<tr><td><code>INVALID</code></td><td>不正な状態。</td></tr>
+</tbody>
+</table>
+<p><span class="guess">[要参考文献: Android Developers <code>android.net.wifi.SupplicantState</code> 列挙値定義ドキュメント]</span></p>
+
+<h4>ステップ 4: ラベル付与（最終状態ラベルの決定）</h4>
+
+<p><strong>設計の経緯</strong></p>
+<p><span class="added">IEEE 802.11 の仕様書においては、認証・結合・4-way ハンドシェイクの各手続きが完了するまでの所要時間について、明示的な規定は示されていない<span class="guess">[要参考文献: IEEE 802.11-2020 §11、§12 を精査のうえ確定]</span>。また、測定端末に用いる Android プラットフォームの公式ドキュメントにおいても、<code>SupplicantState</code> の各遷移に要する時間の目安は示されていない<span class="guess">[要参考文献: Android Developers <code>SupplicantState</code> ドキュメントの該当節]</span>。したがって、1 件のアクセスポイントに対する接続試行がいつ終結するかは、事前には保証されない。</span></p>
+
+<p><span class="added">実運用上、<code>onAvailable()</code> やサプリカント状態遷移の終端が、必ずしもすべてのアクセスポイントにおいて観測されるとは限らない。かかる場合に無限の待機を行うことは、測定時間の観点から合理的ではないため、本機能においては、1 件のアクセスポイントに対する試行に上限時間（タイムアウト）を設ける方針を採用した。</span></p>
+
+<p><strong>タイムアウト値の設定根拠</strong></p>
+<p><span class="added">タイムアウト値を定めるにあたり、「測定者が歩行移動する間に AP の電波範囲内に留まる時間」という観点から、以下の試算を行った。一般的な徒歩速度を 1.5 m/s（約 5.4 km/h）とするとき<span class="guess">[要参考文献: 徒歩平均速度の出典]</span>、接続試行の開始から 10 秒後には、測定者は AP の位置から約 15 m 離れた位置に達する計算となる。無線 LAN AP の実用的な電波到達範囲は数十 m 程度とされており<span class="guess">[要参考文献: 無線 LAN AP の実用カバレッジに関する出典（例: IEEE 802.11 / Wi-Fi Alliance 技術資料）]</span>、これを超過する距離・時間において接続試行を継続することの合理性は乏しいと判断した。この仮定に基づき、本機能においては、1 件のアクセスポイントに対する試行全体のタイムアウトを 10000 ms と定めた<span class="evidence">[確認済: SupplicantMeasurer.kt:30, 230]</span>。</span></p>
+
+<p><strong>タイムアウト値の妥当性の検証</strong></p>
+<p><span class="added">上記の値の妥当性を検証するため、サプリカント状態を受信するたびに、測定開始時点からの経過時間を記録する機能を用いて、実測を行った<span class="evidence">[確認済: SupplicantMeasurer.kt:98-108]</span>。その結果、10 秒以内に認証手続きの結末（<code>COMPLETED</code> への到達、または認証失敗に伴う <code>DISCONNECTED</code> への復帰等）が観測されるアクセスポイントが多数存在することが確認された<span class="guess">[要参考文献: 本研究内の実測結果を示す章節への参照（例: 「○章 実測結果」）]</span>。</span></p>
+
+<p><strong>最終状態ラベルの必要性</strong></p>
+<p><span class="added">1 回の接続試行においては、アクセスポイントにより (i) サプリカント状態遷移が 1 件も観測されない場合、(ii) 途中段階まで観測されるが <code>COMPLETED</code> に到達しない場合、(iii) <code>COMPLETED</code> に到達する場合が混在し得る。分析時に、アクセスポイント単位で試行結末を判別することを可能とするため、本機能においては、各試行の結末を一意に分類する文字列ラベルを独自に定義し、アクセスポイントごとに付与する。ラベルの決定規則を表 3 に示す。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:267-287, 298-306]</span></p>
+
+<figcaption>表 3 最終状態ラベルの値および決定条件</figcaption>
+<table>
+<thead><tr><th>ラベル値</th><th>決定条件</th></tr></thead>
+<tbody>
+<tr><td><code>SKIPPED</code></td><td>セキュリティ分類が WEP である場合、または BSSID から <code>MacAddress</code> が構築できず、接続試行自体が行われなかった場合。</td></tr>
+<tr><td><code>REQUEST_FAILED</code></td><td><code>ConnectivityManager.requestNetwork()</code> の呼出し自体が例外を送出した場合。</td></tr>
+<tr><td><code>NETWORK_AVAILABLE</code></td><td><code>NetworkCallback.onAvailable()</code> が発火した場合（Android により接続成立と判定されたこと）。</td></tr>
+<tr><td><code>AUTH_COMPLETED</code></td><td>サプリカント状態遷移列の末尾が <code>COMPLETED</code> である場合。</td></tr>
+<tr><td><code>PRE_TIMEOUT_&lt;前の状態&gt;</code></td><td><code>DISCONNECTED</code> の受信による早期終了が生じた場合。<code>&lt;前の状態&gt;</code> とは、遷移列において <code>DISCONNECTED</code> の 1 つ前に現れる状態名を指す。</td></tr>
+<tr><td><code>PRE_TIMEOUT_ASSOCIATED</code></td><td><code>ASSOCIATED</code> 受信時の早期終了モードが有効であり、かつ <code>ASSOCIATED</code> が受信された場合。</td></tr>
+<tr><td><code>IDLE_&lt;最も進んだ状態&gt;</code> / <code>IDLE_NULL</code></td><td>状態受信後の無変化タイマー（MODE1、3338 ms）の発火により終了した場合。遷移列が空である場合は <code>IDLE_NULL</code>。</td></tr>
+<tr><td><code>TIMEOUT_&lt;最も進んだ状態&gt;</code> / <code>TIMEOUT_NULL</code></td><td>全体タイムアウト（MODE1 は 10000 ms、MODE2 はユーザ指定値）が経過した時点において、上記のいずれの早期終了条件も成立しなかった場合。遷移列が空である場合は <code>TIMEOUT_NULL</code>。</td></tr>
+</tbody>
+</table>
+<p><span class="added">「最も進んだ状態」は、<code>DISCONNECTED &lt; INACTIVE &lt; SCANNING &lt; AUTHENTICATING &lt; ASSOCIATING &lt; ASSOCIATED &lt; FOUR_WAY_HANDSHAKE &lt; GROUP_HANDSHAKE &lt; COMPLETED</code> の順序に基づき、遷移列から 1 つを選出するものとする。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:298-306]</span></p>
+
+<h4>ステップ 5: データ送信</h4>
+
+<p><span class="added">ステップ 3 およびステップ 4 を全アクセスポイントについて実行し終えた時点で、1 地点分の測定結果が確定する。測定者が n 地点における測定を終え、送信操作を行った場合、以下の処理が実行される。</span></p>
+
+<ol>
+<li><span class="added">各アクセスポイントの測定結果（サプリカント状態遷移列、最終状態ラベル、測定所要時間、接続要求 API 呼出し記録、および接続試行開始時刻の 5 項目）は、ビーコンスキャン機能から引き継いだ項目と併せて、1 件の JSON オブジェクトに整形され、端末内の保留データに追記される<span class="evidence">[確認済: SupplicantMeasurer.kt:289-295, ConnectionMeasurementActivity.kt:719-722, 925-933]</span>。</span></li>
+<li><span class="added">自動スキャンセッションの終了時、本機能は、セッションを識別するラベルを <code>java.text.SimpleDateFormat</code> により <code>"yyyy/MM/dd HH:mm~HH:mm &lt;タイムアウトモード&gt;"</code> 形式の文字列として生成し、測定者に提示する。測定者は、これをそのまま採用するか、または任意の文字列に変更したうえで保存することが可能である<span class="evidence">[確認済: ConnectionMeasurementActivity.kt:587-625]</span>。生成されたラベルは、保留データ内の当該セッションの識別情報として書き戻される。手動測定時においては、ラベルは空文字のまま保持される<span class="evidence">[確認済: ConnectionMeasurementActivity.kt:874, 972]</span>。</span></li>
+<li><span class="added">送信モードが「測定直後の送信」である場合は測定完了時に、保留モードである場合は測定者による明示的な送信操作時に、保留データ内の未送信エントリは、<code>HttpURLConnection</code> を介して指定サーバ URL へ HTTP POST により順次送信される。送信に成功したエントリは保留データから削除され、失敗したエントリは端末内に保持される<span class="evidence">[確認済: ConnectionMeasurementActivity.kt:993-1034]</span>。</span></li>
+</ol>
+
+<h4>取得・付加する情報の一覧</h4>
+
+<p><span class="added">本機能が各アクセスポイントに対して記録・付加する情報を表 4 に示す。スキャン単位のメタ情報（スキャン識別子、スキャン時刻、ラベル、端末属性、位置情報）および各アクセスポイントのビーコン由来の情報（BSSID、SSID、RSSI、周波数、Wi-Fi 規格、セキュリティ分類等）については、ビーコンスキャン機能から引き継がれるため、5.1.2 の表 b-1〜b-4 を参照されたい。</span></p>
+
+<figcaption>表 4 サプリカント状態取得機能において各アクセスポイントに付加される情報（データ辞書）</figcaption>
+<table>
+<thead><tr><th>指標名</th><th>内容</th><th>記録方法</th></tr></thead>
+<tbody>
+<tr><td>接続試行開始時刻</td><td>当該アクセスポイントに対する測定開始時刻を、端末ローカル時刻の ISO 8601 形式文字列（<code>yyyy-MM-dd'T'HH:mm:ss.SSS</code>）として保持するもの。サプリカント状態遷移列および接続要求 API 呼出し記録における経過時間 0 ms に対応する絶対時刻となる。</td><td>当該アクセスポイントに対する測定開始時点において <code>System.currentTimeMillis()</code> を取得し、<code>SimpleDateFormat</code> により整形する。<span class="evidence">[確認済: SupplicantMeasurer.kt:191-193]</span></td></tr>
+<tr><td>サプリカント状態遷移列</td><td>1 回の接続試行中において観測された <code>SupplicantState</code> の時系列列。各要素は、状態名（表 2 のいずれか）と、測定開始時点からの経過時間（ms）とから構成される。</td><td><code>SUPPLICANT_STATE_CHANGED_ACTION</code> を <code>BroadcastReceiver</code> を介して受信し、受信ごとに 1 要素を記録リストに追加する。<span class="evidence">[確認済: SupplicantMeasurer.kt:98-108]</span></td></tr>
+<tr><td>最終状態ラベル</td><td>当該アクセスポイントに対する試行の結末を一意に分類した文字列。取り得る値については表 3 を参照されたい。</td><td>測定終了時において、早期終了フラグ、<code>onAvailable</code> の発火有無、API 例外の有無、および遷移列を参照し、条件分岐により生成する。<span class="evidence">[確認済: SupplicantMeasurer.kt:267-287]</span></td></tr>
+<tr><td>測定所要時間</td><td>当該アクセスポイントに対する測定開始時刻から測定終了時刻までの経過時間（ms）。</td><td>測定開始時刻および測定終了時刻の <code>System.currentTimeMillis()</code> の差分として算出する。<span class="evidence">[確認済: SupplicantMeasurer.kt:191, 264]</span></td></tr>
+<tr><td>接続要求 API 呼出し記録</td><td>接続要求 API の呼出しごとの要素列。各要素は、API 名（本機能においては <code>ConnectivityManager.requestNetwork</code>）、測定開始時点からの経過時間（ms）、および結果（成功時は <code>"OK"</code>、例外時は <code>&lt;例外クラス名&gt;: &lt;メッセージ&gt;</code>）から構成される。通常は 1 要素、WEP スキップ時は 0 要素となる。</td><td><code>runCatching</code> によって <code>ConnectivityManager.requestNetwork</code> の呼出しを包み、戻り値から 1 要素を記録リストに追加する。<span class="evidence">[確認済: SupplicantMeasurer.kt:243-249]</span></td></tr>
+</tbody>
+</table>
+
+<h4>利用する主要な Android API（参照一覧）</h4>
+<p><span class="added"><code>ConnectivityManager.requestNetwork()</code>、<code>ConnectivityManager.NetworkCallback.onAvailable()</code>、<code>ConnectivityManager.unregisterNetworkCallback()</code>、<code>WifiNetworkSpecifier.Builder</code>（<code>setBssid</code> / <code>setSsid</code> / <code>setWpa2Passphrase</code> / <code>setWpa3Passphrase</code> / <code>setWpa2EnterpriseConfig</code> / <code>setWpa3EnterpriseStandardModeConfig</code> / <code>setWpa3Enterprise192BitModeConfig</code> / <code>setIsEnhancedOpen</code>）、<code>NetworkRequest.Builder</code>、<code>NetworkCapabilities.TRANSPORT_WIFI</code>、<code>WifiEnterpriseConfig</code>、<code>SupplicantState</code>、<code>WifiManager.SUPPLICANT_STATE_CHANGED_ACTION</code>、<code>WifiManager.EXTRA_NEW_STATE</code>、<code>BroadcastReceiver</code>、<code>android.net.MacAddress</code>、<code>android.os.Handler</code>、<code>kotlinx.coroutines.suspendCancellableCoroutine</code>、<code>kotlinx.coroutines.withTimeoutOrNull</code>、<code>java.text.SimpleDateFormat</code>、<code>java.net.HttpURLConnection</code>。</span><span class="evidence">[確認済: SupplicantMeasurer.kt 全体、ConnectionMeasurementActivity.kt 全体]</span></p>
+
+<h4>定数値</h4>
+<p><span class="added">初回状態待機の無変化タイムアウト: 3000 ms、状態受信後の無変化タイムアウト: 3338 ms、全体タイムアウト（MODE1）: 10000 ms、アクセスポイント間の待機: 300 ms。</span><span class="evidence">[確認済: SupplicantMeasurer.kt:30-33, 181]</span></p>
+
+<h4>参考文献（暫定）</h4>
+<ul>
+<li>[1] 先行研究修士論文（著者名・年度・題目を要記入）<span class="unchecked">[未確認]</span></li>
+<li>[2] Android Developers, <code>WifiManager.SUPPLICANT_STATE_CHANGED_ACTION</code> ドキュメント（URL・参照日を要記入）</li>
+<li>[3] Android Developers, <code>WifiNetworkSpecifier</code> / <code>WifiNetworkSpecifier.Builder</code> ドキュメント（URL・参照日を要記入）</li>
+<li>[4] Android Developers, <code>ConnectivityManager</code> / <code>ConnectivityManager#requestNetwork</code> ドキュメント（URL・参照日を要記入）</li>
+<li>[5] Android Developers, <code>NetworkCallback</code> / <code>onAvailable</code> / <code>onUnavailable</code> ドキュメント（URL・参照日を要記入）</li>
+<li>[6] Android Developers, <code>android.net.wifi.SupplicantState</code> 列挙値ドキュメント（URL・参照日を要記入）</li>
+<li>[7] IEEE 802.11-2020 IEEE Standard for Information Technology—Telecommunications and Information Exchange between Systems Local and Metropolitan Area Networks—Specific Requirements—Part 11: Wireless LAN Medium Access Control (MAC) and Physical Layer (PHY) Specifications（§11 認証・結合手続き、§12 セキュリティ）</li>
+<li>[8] Android Open Source Project, Wi-Fi HAL アーキテクチャ資料（URL・参照日を要記入）</li>
+<li>[9] <code>wpa_supplicant</code> 公式ドキュメント（URL・参照日を要記入）</li>
+<li>[10] 徒歩平均速度に関する出典（要記入）</li>
+<li>[11] 無線 LAN AP の実用カバレッジ距離に関する出典（要記入）</li>
+</ul>
+
+</body>
+</html>

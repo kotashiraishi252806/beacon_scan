@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>修士論文 5.1節 ビーコンスキャン機能 原稿 (2026-11-19)</title>
+<style>
+body { font-family: "Hiragino Sans", "Meiryo", "Yu Gothic", sans-serif; line-height: 1.9; max-width: 960px; margin: 2em auto; padding: 0 1.2em; color: #222; }
+h1, h2, h3, h4 { padding-bottom: 0.3em; }
+h1 { font-size: 1.6em; border-bottom: 2px solid #444; }
+h2 { font-size: 1.4em; border-bottom: 1px solid #888; margin-top: 2em; }
+h3 { font-size: 1.2em; border-bottom: 1px dotted #aaa; margin-top: 1.5em; }
+h4 { font-size: 1.05em; border-bottom: none; margin-top: 1.2em; }
+p { margin: 0.8em 0; }
+.draft { background-color: #fff9c4; padding: 2px 4px; }
+.added { background-color: #e3f2fd; padding: 2px 4px; }
+.evidence { font-size: 0.78em; color: #666; margin-left: 0.2em; }
+.guess { color: #c62828; font-weight: bold; font-size: 0.78em; margin-left: 0.2em; }
+table { border-collapse: collapse; margin: 1em 0; width: 100%; font-size: 0.95em; }
+th, td { border: 1px solid #999; padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background-color: #f0f0f0; }
+pre { background-color: #f6f6f6; padding: 10px; border: 1px solid #ccc; border-radius: 4px; overflow-x: auto; font-size: 0.82em; line-height: 1.4; }
+figcaption { font-weight: bold; margin: 0.6em 0 0.3em 0; }
+.legend { font-size: 0.9em; background-color: #fafafa; border: 1px solid #ccc; padding: 10px 14px; margin: 1em 0; border-radius: 4px; }
+.legend span { padding: 2px 6px; margin: 0 4px; }
+ol, ul { margin: 0.5em 0 0.8em 0; }
+li { margin: 0.3em 0; }
+</style>
+</head>
+<body>
+<h1>修士論文 5.1節 ビーコンスキャン機能 原稿（2026-11-19）</h1>
+
+<div class="legend">
+  <strong>凡例:</strong>
+  <span class="draft">草稿の文</span>
+  <span class="added">AI補完</span>
+  <span class="evidence">[確認済: ファイル名:行番号] は本文より小さい文字で表示</span>
+  <span class="guess">[推測]</span> は赤字
+</div>
+
+<h3>5.1 ビーコンスキャン機能</h3>
+
+<h4>5.1.1 概要</h4>
+
+<p>
+<span class="added">背景や関連研究で述べたとおり、無線LAN環境を把握するためにRSSIを測定することは有用であり、これまでに多くの研究や製品が存在する。しかし、既存の多くは屋内を対象としており、屋外環境への適用を想定していないものも存在する。本研究では屋外を含めた無線LAN環境の把握を目指し、一般ユーザが日常的に持ち歩くスマートフォンを測定端末として採用した。そこで、スマートフォン上で周辺の無線LAN環境のRSSIを測定できる機能を開発した。</span>
+<span class="evidence">[確認済: CLAUDE.md 研究目的節]</span>
+</p>
+
+<h4>5.1.2 機能詳細</h4>
+
+<p>
+<span class="added">本機能はAndroid端末上で動作するアプリとして実装している。端末のWiFiスキャン機能を用いて周辺のアクセスポイントを検出し、各アクセスポイントについて複数の指標を取得する。以下、本機能がスキャンの実行から記録生成までに取得・算出・付与する情報を順に述べる。</span>
+</p>
+
+<p>
+<span class="added">まず、Android端末のWiFiスキャン機能を介してアクセスポイントから直接取得する指標について述べる。スキャンの実行は <code>WifiManager</code> クラス [引用1] の <code>startScan()</code> メソッドの呼び出しによって開始する。スキャンの完了はAndroid OSから <code>SCAN_RESULTS_AVAILABLE_ACTION</code> のブロードキャストとして通知される。これを受信した時点で <code>WifiManager.scanResults</code> プロパティから検出されたアクセスポイントの一覧を <code>ScanResult</code> オブジェクト [引用2] のリストとして取得する。各 <code>ScanResult</code> から取得する指標を表5.1に示す。</span>
+<span class="evidence">[確認済: SimpleMeasurementActivity.kt:109-113, 266, 344, 378]</span>
+</p>
+
+<figcaption>表5.1 <code>ScanResult</code> から取得する指標</figcaption>
+<table>
+<thead>
+<tr><th>指標</th><th>例</th><th>単位</th><th>型</th><th>参照フィールド</th></tr>
+</thead>
+<tbody>
+<tr><td>BSSID</td><td>aa:bb:cc:dd:ee:ff</td><td>-</td><td>文字列</td><td><code>ScanResult.BSSID</code></td></tr>
+<tr><td>MLD MACアドレス</td><td>aa:bb:cc:dd:ee:ff</td><td>-</td><td>文字列</td><td><code>ScanResult.apMldMacAddress</code>（Android APIレベル33以上）</td></tr>
+<tr><td>SSID</td><td>MyWiFi</td><td>-</td><td>文字列</td><td><code>ScanResult.SSID</code></td></tr>
+<tr><td>RSSI</td><td>-65</td><td>dBm</td><td>整数</td><td><code>ScanResult.level</code></td></tr>
+<tr><td>周波数</td><td>5200</td><td>MHz</td><td>整数</td><td><code>ScanResult.frequency</code></td></tr>
+<tr><td>WiFi規格コード</td><td>6<span class="guess">[推測]</span></td><td>-</td><td>整数</td><td><code>ScanResult.wifiStandard</code></td></tr>
+<tr><td>capabilities生文字列</td><td>[WPA2-PSK-CCMP][ESS]</td><td>-</td><td>文字列</td><td><code>ScanResult.capabilities</code></td></tr>
+</tbody>
+</table>
+
+<p>
+<span class="added">表5.1の指標のうち、WiFi規格コードは整数、capabilities生文字列はAndroid OSの内部表現であり、そのままでは分析用途に扱いにくい。また、BSSIDの先頭24ビットはIEEEが管理するベンダ識別子であり、個別の扱いが分析上有用な場面がある。さらに、周波数の値はMHz単位の整数であるため、2.4GHz帯・5GHz帯・6GHz帯のいずれに属するかを別途判定する必要がある。これらの事情から、本機能では表5.1で取得した値を基に、アプリ内部で追加の指標を算出する。算出する指標と算出方法を表5.2に示す。</span>
+</p>
+
+<figcaption>表5.2 <code>ScanResult</code> の値から算出する指標</figcaption>
+<table>
+<thead>
+<tr><th>指標</th><th>例</th><th>単位</th><th>型</th><th>算出元</th><th>算出方法</th></tr>
+</thead>
+<tbody>
+<tr><td>OUI</td><td>aa:bb:cc</td><td>-</td><td>文字列</td><td>BSSID</td><td>先頭3オクテット（コロン区切りで8文字）を抽出<span class="evidence">[確認済: WifiUtils.kt:128]</span></td></tr>
+<tr><td>バンド</td><td>5GHz</td><td>-</td><td>文字列</td><td>周波数</td><td>2400〜2500 MHzを2.4GHz、4900〜5924 MHzを5GHz、5925 MHz以上を6GHzに分類<span class="evidence">[確認済: WifiUtils.kt:9-14]</span></td></tr>
+<tr><td>チャネル幅</td><td>80</td><td>MHz</td><td>整数</td><td><code>ScanResult.channelWidth</code></td><td>列挙値を20、40、80、160 MHzのいずれかに変換<span class="evidence">[確認済: WifiUtils.kt:109-115]</span></td></tr>
+<tr><td>WiFi規格名</td><td>802.11ax</td><td>-</td><td>文字列</td><td>WiFi規格コード</td><td>整数コードを802.11a/b/g、802.11n、802.11ac、802.11ax、802.11ad、802.11beのいずれかの文字列に変換<span class="evidence">[確認済: WifiUtils.kt:16-24]</span></td></tr>
+<tr><td>セキュリティ分類</td><td>WPA3</td><td>-</td><td>文字列</td><td>capabilities生文字列、または <code>ScanResult.securityTypes</code>（Android APIレベル33以上）</td><td>優先順位に基づきWPA2/WPA3、WPA3、WPA2、WPA、WEP、Openのいずれかに分類<span class="evidence">[確認済: WifiUtils.kt:26-70]</span></td></tr>
+</tbody>
+</table>
+
+<p>
+<span class="added">以上の表5.1および表5.2の指標は、いずれも各アクセスポイントそのものの属性を表す。本機能ではこれらに加えて、スキャンがいつ・どこで・どの端末で行われたものかを後から参照できるようにするため、スキャン単位で付与する情報を取得する。はじめに、本研究は屋外を含む無線LAN環境の把握を目的としており、取得した電波の各指標がどの地点で測定されたものかを対応づけることが必要であるため、スキャンごとに位置情報を取得する。位置情報の取得には、Google Play services位置情報APIが提供する <code>FusedLocationProviderClient</code> クラス [引用3] を用い、精度優先の設定（<code>Priority.PRIORITY_HIGH_ACCURACY</code>）を指定して <code>getCurrentLocation()</code> メソッドを呼び出す。あわせて、本研究は複数の一般ユーザの端末での測定を想定しているため、端末ごとの機種差やAndroidプラットフォーム差を後から把握できるよう、<code>android.os.Build</code> クラス [引用4] から端末属性を取得する。これらの情報を表5.3に示す。</span>
+<span class="evidence">[確認済: SimpleMeasurementActivity.kt:351, 452-454、CLAUDE.md 研究目的節]</span>
+</p>
+
+<figcaption>表5.3 スキャン単位で付与する位置情報および端末情報</figcaption>
+<table>
+<thead>
+<tr><th>指標</th><th>例</th><th>単位</th><th>型</th><th>取得元</th></tr>
+</thead>
+<tbody>
+<tr><td>緯度</td><td>35.6895</td><td>度</td><td>浮動小数点</td><td><code>FusedLocationProviderClient.getCurrentLocation()</code> の戻り値</td></tr>
+<tr><td>経度</td><td>139.6917</td><td>度</td><td>浮動小数点</td><td>同上</td></tr>
+<tr><td>位置精度</td><td>10.0</td><td>m</td><td>浮動小数点</td><td>同上</td></tr>
+<tr><td>端末メーカー名</td><td>Google</td><td>-</td><td>文字列</td><td><code>Build.MANUFACTURER</code></td></tr>
+<tr><td>端末モデル名</td><td>Pixel 7</td><td>-</td><td>文字列</td><td><code>Build.MODEL</code></td></tr>
+<tr><td>Android APIレベル</td><td>33</td><td>-</td><td>整数</td><td><code>Build.VERSION.SDK_INT</code></td></tr>
+</tbody>
+</table>
+
+<p>
+<span class="added">最後に、個々のスキャン記録を一意に識別し、複数のスキャンを測定セッションや端末単位で紐づけるために、アプリ内部で識別子および時刻文字列を生成する。これらの情報を表5.4に示す。</span>
+</p>
+
+<figcaption>表5.4 アプリ内部で生成する情報</figcaption>
+<table>
+<thead>
+<tr><th>指標</th><th>例</th><th>単位</th><th>型</th><th>生成方法</th></tr>
+</thead>
+<tbody>
+<tr><td>scan_id</td><td>UUID形式の文字列</td><td>-</td><td>文字列</td><td>スキャンごとに <code>UUID.randomUUID()</code> で発行<span class="evidence">[確認済: SimpleMeasurementActivity.kt:385]</span></td></tr>
+<tr><td>device_id</td><td>UUID形式の文字列</td><td>-</td><td>文字列</td><td>アプリ初回起動時に <code>UUID.randomUUID()</code> で生成し、SharedPreferencesに永続化する。以降は保存値を読み出す<span class="evidence">[確認済: SimpleMeasurementActivity.kt:553-554]</span></td></tr>
+<tr><td>scanned_at</td><td>2026-11-19T10:30:00</td><td>-</td><td>文字列</td><td>スキャン実行時の端末時刻を <code>SimpleDateFormat</code> で <code>yyyy-MM-dd'T'HH:mm:ss</code> 形式に整形<span class="evidence">[確認済: SimpleMeasurementActivity.kt:430]</span></td></tr>
+<tr><td>label</td><td>2026/11/19 10:00〜10:30</td><td>-</td><td>文字列</td><td>自動スキャン時にはセッション開始時にUUIDを付与し、セッション終了時に当該セッションの時刻レンジ文字列へ置換する。手動スキャン時は空文字とする<span class="evidence">[確認済: SimpleMeasurementActivity.kt:228, 472-506]</span></td></tr>
+</tbody>
+</table>
+
+<h4>5.1.3 使用例</h4>
+
+<p>
+<span class="added">本節では、本機能の代表的な利用シナリオとして、屋外を移動しながら自動スキャンを継続し、停止後にlabelを設定してデータを送信する流れを示す。操作と内部処理の対応関係を、ユーザー操作・アプリ処理・UI表示の3列に分けた処理フローとして図5.1に示す。なお、自動スキャン中は <code>switchSendMode</code> が強制的にOFFとなるため、スキャン結果は端末内の <code>pending_scans.json</code> に蓄積されるのみでサーバーへは送信されない。label設定ダイアログを閉じた後、ユーザーが明示的に送信操作を行った時点で <code>trySendAllPending()</code> が呼び出され、サーバー送信が実行される。</span>
+<span class="evidence">[確認済: SimpleMeasurementActivity.kt:235-237, 257, 415-416, 508]</span>
+</p>
+
+<figcaption>図5.1 自動スキャン1セッションの処理フロー（ASCII表記）</figcaption>
+<pre>
+ユーザー操作              アプリ処理                         UI表示
+─────────────────────────────────────────────────────────────────
+[自動スキャンON] ────→ sessionId生成
+                       位置情報取得開始
+                       switchSendMode強制OFF ──────→ "自動測定中"表示
+                                                     btnScan無効化
+                       ┌────────────────────────┐
+                       │ 5秒間隔ループ:          │
+(屋外を移動)           │   startScan()           │
+                       │   → ScanResult取得     │
+                       │   → pending_scans.json │
+                       │     に追記（送信なし） │
+                       └────────────────────────┘
+[自動スキャンOFF] ───→ ループ停止
+                       位置情報取得停止
+                       switchSendMode再活性化 ─────→ labelダイアログ表示
+[labelを入力しOK] ───→ labelを当該sessionIdの
+                       全スキャンに適用して保存
+                            ┌─── 送信経路の分岐 ───┐
+                            ↓                      ↓
+[btnSendPending押下]   [switchSendMode ONにして
+                        次の手動スキャンを実行]
+          ↓                      ↓
+          └────────→ trySendAllPending() ────────→ Toast "送信成功" / "送信失敗"
+</pre>
+<p><span class="evidence">[確認済: SimpleMeasurementActivity.kt:99-104, 195-200, 227-262, 387, 415-416, 508, 541, 547]</span></p>
+
+<p>
+<span class="added">同じ処理フローをMermaid記法で記述したものを以下に示す。Mermaidをサポートするレンダラ（Markdown系ビューア、draw.ioのMermaid入力など）に貼り付けることで、subgraphごとに縦列として描画される。</span>
+</p>
+
+<figcaption>図5.2 自動スキャン1セッションの処理フロー（Mermaid記法）</figcaption>
+<pre>
+flowchart TB
+    subgraph U[ユーザー操作]
+        direction TB
+        U1[自動スキャンON]
+        U2[屋外を移動]
+        U3[自動スキャンOFF]
+        U4[label入力しOK]
+        U5a[btnSendPending押下]
+        U5b[switchSendMode ONにして<br/>次の手動スキャン]
+    end
+    subgraph A[アプリ処理]
+        direction TB
+        A1["sessionId生成<br/>位置情報取得開始<br/>switchSendMode強制OFF"]
+        A2["5秒間隔ループ:<br/>startScan → ScanResult取得<br/>→ pending_scans.jsonに追記<br/>（送信なし）"]
+        A3["ループ停止<br/>位置情報取得停止<br/>switchSendMode再活性化"]
+        A4[labelをsessionId内の<br/>全スキャンに適用して保存]
+        A5[trySendAllPending 呼び出し]
+    end
+    subgraph V[UI表示]
+        direction TB
+        V1["自動測定中 表示<br/>btnScan無効化"]
+        V2[labelダイアログ表示]
+        V3["Toast: 送信成功 / 送信失敗"]
+    end
+    U1 --> A1 --> V1
+    V1 --> A2
+    U2 -. 運用上の操作 .-> A2
+    U3 --> A3 --> V2
+    V2 --> U4 --> A4
+    A4 --> U5a --> A5
+    A4 --> U5b --> A5
+    A5 --> V3
+</pre>
+
+<h2>参考文献（本節で参照したもの）</h2>
+
+<ul>
+  <li>[引用1] Android Developers, "WifiManager", https://developer.android.com/reference/android/net/wifi/WifiManager</li>
+  <li>[引用2] Android Developers, "ScanResult", https://developer.android.com/reference/android/net/wifi/ScanResult</li>
+  <li>[引用3] Google Developers, "FusedLocationProviderClient", https://developers.google.com/android/reference/com/google/android/gms/location/FusedLocationProviderClient</li>
+  <li>[引用4] Android Developers, "Build", https://developer.android.com/reference/android/os/Build</li>
+</ul>
+
+</body>
+</html>

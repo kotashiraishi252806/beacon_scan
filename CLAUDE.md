@@ -47,6 +47,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | セキュリティ分類 | md/セキュリティ、無線LAN規格/security_classification_notes.md | MainActivity.kt |
 | BSSIDごとの接続試行開始時刻記録 (`connection_started_at`) | docs/design/connection_started_at記録.md | SupplicantMeasurer.kt, ScanData.kt, ConnectionMeasurementActivity.kt |
 | Supplicant測定のタイムアウトモード選択 (MODE1/MODE2) | docs/design/タイムアウトモード.md | SupplicantMeasurer.kt, ConnectionMeasurementActivity.kt, activity_main.xml |
+| Supplicant測定 finalState 最進状態採用 | docs/design/supplicant_finalstate最進状態採用.md | SupplicantMeasurer.kt |
 
 ## 研究目的とアプリの位置づけ
 

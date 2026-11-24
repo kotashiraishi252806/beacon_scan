@@ -272,8 +272,8 @@ class SupplicantMeasurer(
                 if (transitions.isNotEmpty() && transitions.last().state == "COMPLETED") {
                     "AUTH_COMPLETED"
                 } else {
-                    val prevState = if (transitions.size >= 2) transitions[transitions.size - 2].state else transitions.last().state
-                    "PRE_TIMEOUT_$prevState"
+                    val mostAdvanced = mostAdvancedState(transitions)
+                    if (mostAdvanced != null) "PRE_TIMEOUT_$mostAdvanced" else "PRE_TIMEOUT_NULL"
                 }
             }
             idleExitOccurred -> {
